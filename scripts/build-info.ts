@@ -5,6 +5,9 @@
  * `$git()` / `$compileTime()` macros, and it is rewritten every build, so rbxtsc always recompiles it and the git
  * info can't go stale. `$git()` has no dirty flag: without `--dirty` it comes from `git status --porcelain`.
  *
+ * The last line is a timestamp comment: rbxtsc builds incrementally and skips a file whose text did not change, which
+ * would keep a stale `$git()` / `$compileTime()` (e.g. a new commit with the same channel and dirty flag).
+ *
  * Set TYPETORCH_SKIP_BUILD_INFO=1 to keep a build.ts the CLI already wrote (the CLI then runs `bun run build`).
  */
 import { writeFileSync } from "node:fs";
@@ -40,6 +43,7 @@ const content = [
 	'import type { BuildInfo } from "@typetorch/framework";',
 	'const GIT = $git("Branch", "Commit");',
 	`export const BUILD: BuildInfo = { branch: GIT.Branch, commit: GIT.Commit, dirty: ${dirty}, channel: "${channel}", builtAt: $compileTime() };`,
+	`// ${new Date().toISOString()}`,
 	"",
 ].join("\n");
 
