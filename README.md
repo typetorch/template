@@ -47,3 +47,9 @@ The payload maps only `node_modules/@typetorch/framework` (its `out/`), never th
 - Plain data that must survive a swap goes in `this.ctx.persist(key, init)`.
 - UI follows the user rules: no emojis, minimal text, UIScale pops (`popIn` / `popOut` / `bump`), script-free
   ScrollingFrames.
+
+## Claude tab (remote-claude)
+On a dev-channel private server, the dev menu's Claude tab sends prompts to Claude Code on a dev's machine while
+`typetorch remote-claude --users <ids>` runs there. One-time setup: add the experience secret
+`typetorch_remote_claude` (Creator Hub, Secrets, domain `*.trycloudflare.com`; for Studio, a local secret) with the same
+value as `TYPETORCH_REMOTE_CLAUDE_SECRET` on that machine, and turn on HTTP requests for the experience.
