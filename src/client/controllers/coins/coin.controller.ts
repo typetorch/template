@@ -1,6 +1,6 @@
 import { RunService } from "@rbxts/services";
 import { Controller, Module, observeElement, type OnStart } from "@typetorch/framework";
-import { network } from "../../shared/net";
+import { network } from "../../../shared/net";
 
 /** Makes every live coin collectable: a highlight, a spin and a prompt, each in the coin's own trove. */
 @Controller()
