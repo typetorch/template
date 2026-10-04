@@ -14,6 +14,11 @@
  *   bun scripts/packages.ts           build framework, pack both, sync into node_modules   (after changing framework)
  *   bun scripts/packages.ts --no-build   pack both and sync, without rebuilding framework
  *   bun scripts/packages.ts --sync    only extract the existing tarballs (runs as postinstall)
+ *
+ * Packing also records where each tarball came from in .typetorch/packages/manifest.json (the git HEAD and whether the
+ * checkout had uncommitted changes). `typetorch build` stamps those commits into the payload ("sources") and lists
+ * the commits since the previous deploy as the artifact's "what changed" lines:
+ *   { "schema": 1, "packages": { "framework": { "version", "commit", "commitHash", "dirty", "path", "packedAt" }, ... } }
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -28,6 +33,27 @@ const PACKAGES = [
 
 const syncOnly = Bun.argv.includes("--sync");
 const noBuild = Bun.argv.includes("--no-build");
+
+const manifestPath = join(packagesDir, "manifest.json");
+
+/** The checkout's git identity, or undefined outside a git repo. */
+function gitSource(dir: string): { commit: string; commitHash: string; dirty: boolean } | undefined {
+	const git = (...args: string[]) => {
+		const result = Bun.spawnSync(["git", ...args], { cwd: dir, stdout: "pipe", stderr: "pipe" });
+		return result.exitCode === 0 ? result.stdout.toString().trim() : undefined;
+	};
+	const commitHash = git("rev-parse", "HEAD");
+	if (!commitHash) return undefined;
+	return { commit: commitHash.slice(0, 7), commitHash, dirty: (git("status", "--porcelain") ?? "") !== "" };
+}
+
+function readManifest(): { schema: 1; packages: Record<string, unknown> } {
+	try {
+		const parsed = JSON.parse(readFileSync(manifestPath, "utf8"));
+		if (parsed && typeof parsed.packages === "object") return { schema: 1, packages: parsed.packages };
+	} catch {}
+	return { schema: 1, packages: {} };
+}
 
 function run(cmd: string[], cwd: string) {
 	const result = Bun.spawnSync(cmd, { cwd, stdout: "inherit", stderr: "inherit" });
@@ -73,12 +99,22 @@ function extract(tarball: string, destination: string) {
 }
 
 mkdirSync(packagesDir, { recursive: true });
+const manifest = readManifest();
 for (const pkg of PACKAGES) {
 	const tarball = join(packagesDir, `typetorch-${pkg.name}.tgz`);
 	if (!syncOnly) {
 		if (!existsSync(pkg.source)) throw new Error(`${pkg.source} not found (clone it next to template/)`);
 		if (pkg.build && !noBuild) run(["bun", "run", "build"], pkg.source);
+		// Identity before packing (the framework build writes only ignored files, so it doesn't change "dirty").
+		const source = gitSource(pkg.source);
 		run(["bun", "pm", "pack", "--filename", tarball, "--ignore-scripts", "--quiet"], pkg.source);
+		let version: string | undefined;
+		try {
+			version = JSON.parse(readFileSync(join(pkg.source, "package.json"), "utf8")).version;
+		} catch {}
+		manifest.packages[pkg.name] = { version, ...source, path: pkg.source, packedAt: new Date().toISOString() };
+		writeFileSync(manifestPath, JSON.stringify(manifest, null, "\t") + "\n");
+		console.log(`packages: @typetorch/${pkg.name} ${version ?? "?"} packed from ${source ? `${source.commit}${source.dirty ? " (dirty)" : ""}` : "a folder without git"}`);
 	}
 	if (!existsSync(tarball)) {
 		console.warn(`packages: ${tarball} is missing; run \`bun scripts/packages.ts\` first`);
