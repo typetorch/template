@@ -1,8 +1,10 @@
 import { CollectionService, Workspace } from "@rbxts/services";
-import { Module, Service, type OnStart, type OnTick } from "@typetorch/framework";
+import { Module, Service, setNetworkLimits, type OnStart, type OnTick } from "@typetorch/framework";
 import { $print, $warn } from "rbxts-transform-debug";
-import { network } from "../../shared/net";
-import { ScoreService } from "./score.service";
+import { network } from "../../../shared/net";
+import type { Phase } from "../../../shared/rush/types";
+import { RoundService } from "../rush/round.service";
+import { WalletService } from "./wallet.service";
 
 const COIN_TAG = "Coin";
 const COIN_COUNT = 12;
@@ -10,14 +12,21 @@ const RING_RADIUS = 22;
 const MAX_DISTANCE = 14;
 const RESPAWN_SECONDS = 4;
 
-/** Spawns coins around the spawn point and pays for them. ScoreService comes in through the constructor. */
+/**
+ * Lobby coins: a ring around the spawn, collectable between rounds (hidden while a round runs). WalletService and
+ * RoundService come in through the constructor.
+ */
 @Service()
 export class CoinService extends Module implements OnStart, OnTick {
 	private readonly coins = new Map<string, BasePart>();
 	private readonly respawnAt = new Map<string, number>();
 	private folder?: Folder;
+	private hidden = false;
 
-	constructor(private readonly score: ScoreService) {
+	constructor(
+		private readonly wallet: WalletService,
+		private readonly round: RoundService,
+	) {
 		super();
 	}
 
@@ -35,18 +44,29 @@ export class CoinService extends Module implements OnStart, OnTick {
 			const position = center.add(new Vector3(math.cos(angle) * RING_RADIUS, 3, math.sin(angle) * RING_RADIUS));
 			this.spawnCoin(`coin-${index + 1}`, position);
 		}
+		setNetworkLimits({ "coins.collect": { rate: [6, 4], maxString: 16 } });
 		this.trove.add(network.server.coins.collect.on((player, coinId) => this.collect(player, coinId)));
+		this.trove.add(this.round.onPhaseChanged((phase) => this.showFor(phase)));
+		this.showFor(this.round.phase());
 		$print(`spawned ${COIN_COUNT} coins (generation ${this.ctx.generation})`);
 	}
 
 	onTick() {
-		if (this.respawnAt.size() === 0) return;
+		if (this.respawnAt.size() === 0 || this.hidden) return;
 		const now = os.clock();
 		for (const [coinId, at] of this.respawnAt) {
 			if (now < at) continue;
 			this.respawnAt.delete(coinId);
 			const coin = this.coins.get(coinId);
 			if (coin) coin.Parent = this.folder;
+		}
+	}
+
+	/** Coins belong to the lobby: out of the way during the countdown and the round. */
+	private showFor(phase: Phase) {
+		this.hidden = phase === "countdown" || phase === "round";
+		for (const [coinId, coin] of this.coins) {
+			coin.Parent = this.hidden || this.respawnAt.has(coinId) ? undefined : this.folder;
 		}
 	}
 
@@ -63,12 +83,14 @@ export class CoinService extends Module implements OnStart, OnTick {
 		coin.SetAttribute("CoinId", coinId);
 		CollectionService.AddTag(coin, COIN_TAG);
 		coin.Parent = this.folder;
+		// Parts parented to nil (collected or hidden) still need the trove to clean them up.
+		this.trove.add(coin);
 		this.coins.set(coinId, coin);
 	}
 
 	private collect(player: Player, coinId: string) {
 		const coin = this.coins.get(coinId);
-		if (!coin || coin.Parent === undefined) return;
+		if (!coin || coin.Parent === undefined || this.hidden) return;
 		const root = player.Character?.FindFirstChild("HumanoidRootPart") as BasePart | undefined;
 		if (!root) return;
 		const distance = root.Position.sub(coin.Position).Magnitude;
@@ -78,6 +100,6 @@ export class CoinService extends Module implements OnStart, OnTick {
 		}
 		coin.Parent = undefined;
 		this.respawnAt.set(coinId, os.clock() + RESPAWN_SECONDS);
-		this.score.add(player, 1);
+		this.wallet.add(player, 1);
 	}
 }

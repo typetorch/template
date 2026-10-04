@@ -6,6 +6,7 @@
       "name": "typetorch-template",
       "dependencies": {
         "@flamework/core": "^1.3.2",
+        "@rbxts/charm": "^0.11.1",
         "@rbxts/services": "^1.6.0",
         "@rbxts/t": "^3.2.1",
         "@rbxts/trove": "^1.3.0",
@@ -27,6 +28,8 @@
   },
   "packages": {
     "@flamework/core": ["@flamework/core@1.3.2", "", { "dependencies": { "@rbxts/maid": "^1.0.0-ts.1", "@rbxts/object-utils": "^1.0.4", "@rbxts/services": "^1.1.4", "@rbxts/signal": "^1.0.3", "@rbxts/t": "^3.2.1" } }, "sha512-4/tY5plivbvr4vvwRtxzuym7Nl5eDHM3RAR2nZHuuNz31h2S2CIrCoGHjkod0I6qPpfs4eUw2TiIrvVN8iC8JQ=="],
+
+    "@rbxts/charm": ["@rbxts/charm@0.11.1", "", {}, "sha512-+o37xMtGYk3LJ9DYo5Y6kpzGWpZ6R5e1bIWWm/zsu/vY6njJHeMvHZGx/RJa94CrkdHRrhDSkKqlGN+b9KuPuA=="],
 
     "@rbxts/compiler-types": ["@rbxts/compiler-types@3.0.0-types.0", "", {}, "sha512-VGOHJPoL7+56NTatMGqQj3K7xWuzEV+aP4QD5vZiHu+bcff3kiTmtoadaF6NkJrmwfFAvbsd4Dg764ZjWNceag=="],
 

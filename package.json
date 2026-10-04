@@ -2,7 +2,7 @@
 	"name": "typetorch-template",
 	"version": "0.1.0",
 	"private": true,
-	"description": "TypeTorch starter game: a small hot-swappable coin game that shows every framework feature.",
+	"description": "TypeTorch starter game: Target Rush, a round-based minigame that hot-swaps mid-round, plus lobby coins. Shows every framework feature.",
 	"license": "MIT",
 	"scripts": {
 		"build": "bun scripts/build-info.ts && rbxtsc",
@@ -13,6 +13,7 @@
 	},
 	"dependencies": {
 		"@flamework/core": "^1.3.2",
+		"@rbxts/charm": "^0.11.1",
 		"@rbxts/services": "^1.6.0",
 		"@rbxts/t": "^3.2.1",
 		"@rbxts/trove": "^1.3.0",
