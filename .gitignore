@@ -1,0 +1,16 @@
+# dependencies and build outputs
+node_modules/
+out/
+include/
+build/
+*.tsbuildinfo
+flamework.build
+# generated before every compile (git identity of the build)
+src/shared/build.ts
+# local TypeTorch state (packed @typetorch packages, CLI cache)
+.typetorch/
+# secrets
+.env
+.env.*
+# private working notes (kept locally, never pushed)
+CHANGELOG.md

@@ -1,0 +1,12 @@
+{
+	"project": "template",
+	"universeId": 10769310634,
+	"placeId": 102504202680447,
+	"creator": { "groupId": 8015542 },
+	"defaultBranch": "prod",
+	"branches": { "main": "prod" },
+	"channels": { "prod": "prod" },
+	"members": { "409950512": "owner" },
+	"devBadgeId": null,
+	"kernel": "node_modules/@typetorch/kernel"
+}
