@@ -49,7 +49,7 @@ session board in the world and in the HUD. Solo works; friends share the targets
 | `TargetController`, `PadController` | `observeElement` (tag + `isRealFrame` + per-element trove) on server parts; local visuals, predicted hits confirmed by `invoke`, edge arrows to off-screen targets |
 | `ResultsController` | The single `PopupQueue`; client `persist` remembers which results were closed, so a client swap mid-card shows it again only if it wasn't closed |
 | `UpdateToastController` | `onUpdatePending`: "Updating ~3s" toast; after the swap `startInfo` (kind, reason) gives "Updated #seq <id> 1.8s" |
-| `DevOverlayController` | `isDev` + `onPlayerDevChanged`: `gen | branch (channel) | artifact | how it started` at the bottom, devs only |
+| `DevOverlayController` | `isDev` + `onPlayerDevChanged`: `gen | branch (channel) | artifact | how it started` in the bottom-left corner, devs only |
 
 **Live demo.** Start a round, then change a knob in `src/shared/rush/config.ts`, deploy to dev and keep playing:
 - `TARGET_SIZE = 9` (or `2.5`): every target changes size the moment the new server generation runs;

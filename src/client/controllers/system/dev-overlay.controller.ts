@@ -5,9 +5,9 @@ import { corner, FONT_MONO, make, pad, panel } from "../../../shared/ui/kit";
 import { UiController } from "../ui/ui.controller";
 
 /**
- * Devs only (`TypeTorch.isDev`, cosmetic on the client: the server re-checks everything): a one-line corner overlay
- * with the running generation, branch and channel, artifact, and how this generation started. It follows dev status
- * changes live (`TypeTorch.onPlayerDevChanged`).
+ * Devs only (`TypeTorch.isDev`, cosmetic on the client: the server re-checks everything): a one-line overlay in the
+ * bottom-left corner with the running generation, branch and channel, artifact, and how this generation started. It
+ * follows dev status changes live (`TypeTorch.onPlayerDevChanged`).
  */
 @Controller()
 export class DevOverlayController extends Module implements OnStart {
@@ -27,8 +27,8 @@ export class DevOverlayController extends Module implements OnStart {
 		if (TypeTorch.isPinned()) parts.push("pinned");
 
 		const chip = panel(this.ui.overlay, "DevOverlay", PALETTE.ink, {
-			AnchorPoint: new Vector2(0.5, 1),
-			Position: new UDim2(0.5, 0, 1, -2),
+			AnchorPoint: new Vector2(0, 1),
+			Position: new UDim2(0, 4, 1, -4),
 			Size: UDim2.fromOffset(0, 18),
 			AutomaticSize: Enum.AutomaticSize.X,
 			BackgroundTransparency: 0.35,
