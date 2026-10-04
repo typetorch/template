@@ -8,5 +8,6 @@
 	"channels": { "prod": "prod" },
 	"members": { "409950512": "owner" },
 	"devBadgeId": null,
+	"approval": "prod",
 	"kernel": "node_modules/@typetorch/kernel"
 }
