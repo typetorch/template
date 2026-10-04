@@ -9,8 +9,8 @@ interface BestStore {
 	best: Map<number, number>;
 	/** userId -> best score the DataStore is known to hold. best > saved means a write is due. */
 	saved: Map<number, number>;
-	/** The DataStore failed once (e.g. Studio without API access): stay in-session only. */
-	offline: boolean;
+	/** The DataStore failed (e.g. Studio without API access): stay in-session only for this server. */
+	failed: boolean;
 }
 
 const STORE_VERSION = "v1";
@@ -37,9 +37,9 @@ export class BestService extends Module implements OnInit, OnStart, OnStop {
 		this.store = this.ctx.persist<BestStore>(`rush.best.${STORE_VERSION}`, () => ({
 			best: new Map(),
 			saved: new Map(),
-			offline: !SAVE_PERSONAL_BEST,
+			failed: false,
 		}));
-		if (this.store.offline) return;
+		if (this.offline()) return;
 		const name = TypeTorch.channel === "prod" ? `TargetRush_${STORE_VERSION}` : `TargetRush_${STORE_VERSION}_${TypeTorch.channel}`;
 		const [ok, result] = pcall(() => DataStoreService.GetDataStore(name));
 		if (ok) this.dataStore = result;
@@ -90,15 +90,20 @@ export class BestService extends Module implements OnInit, OnStart, OnStop {
 		return true;
 	}
 
+	/** The knob is read live, so a deploy can turn saving on or off; a failure sticks for this server. */
+	private offline(): boolean {
+		return !SAVE_PERSONAL_BEST || this.store.failed;
+	}
+
 	private goOffline(reason: string) {
-		if (this.store.offline) return;
-		this.store.offline = true;
+		if (this.store.failed) return;
+		this.store.failed = true;
 		$warn(`personal bests stay in-session only: ${reason}`);
 	}
 
 	private load(userId: number) {
 		const dataStore = this.dataStore;
-		if (!dataStore || this.store.offline || this.busy.has(userId)) {
+		if (!dataStore || this.offline() || this.busy.has(userId)) {
 			if (!this.store.best.has(userId)) this.store.best.set(userId, 0);
 			return;
 		}
@@ -131,7 +136,7 @@ export class BestService extends Module implements OnInit, OnStart, OnStop {
 	/** Writes the best if it is ahead of the stored one. Never yields the caller. */
 	private flush(userId: number) {
 		const dataStore = this.dataStore;
-		if (!dataStore || this.store.offline || this.busy.has(userId)) return;
+		if (!dataStore || this.offline() || this.busy.has(userId)) return;
 		const best = this.store.best.get(userId) ?? 0;
 		if (best <= (this.store.saved.get(userId) ?? 0)) return;
 		if (DataStoreService.GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync) < 1) return; // next round

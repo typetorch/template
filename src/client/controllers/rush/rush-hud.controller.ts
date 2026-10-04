@@ -177,9 +177,9 @@ export class RushHudController extends Module implements OnStart, OnRender {
 	}
 
 	private buildScore() {
-		// Top-left, under the dev menu button's spot.
+		// Left side, below the dev menu button's spot and above the mobile thumbstick.
 		const scorePanel = panel(this.ui.hud, "Score", PALETTE.ink, {
-			Position: UDim2.fromOffset(10, 58),
+			Position: new UDim2(0, 10, 0.22, 0),
 			Size: UDim2.fromOffset(0, 0),
 			AutomaticSize: Enum.AutomaticSize.XY,
 			BackgroundTransparency: 0.2,
