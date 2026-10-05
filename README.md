@@ -71,6 +71,13 @@ bun run payload           # build + rojo build -> build/payload.rbxm
 - `bun scripts/build-info.ts --channel prod --dirty` writes `src/shared/build.ts` by hand (the CLI writes the same
   file). With `TYPETORCH_SKIP_BUILD_INFO=1`, `bun run build` keeps a `build.ts` the CLI already wrote.
 - Use `$print` / `$warn` / `$assert` from `rbxts-transform-debug`, never `print` / `warn` / `assert`.
+- `tsconfig.json` runs two compiler plugins, in this order: `rbxts-transform-debug` (the `$print` macros), then
+  `@typetorch/transformer` (the type guards `createNetwork` checks every message with, the constructor dependency ids
+  of `@Service` / `@Controller`, and your own `Modding` macros). No Flamework: `Modding`, `Reflect` and `t` come from
+  `@typetorch/framework`, and only that package is mapped into the payload.
+- `bun run payload` then `lune run ../framework/scripts/test-generations.luau build/payload.rbxm` boots two
+  generations of the payload under Lune and checks that each gets a fresh registry, that every service and controller
+  registers and resolves its dependencies, and that the network guards work.
 
 ## Testing in Studio
 Run your local code in Studio with the real kernel, the dev menu and DataStores, without uploading anything.
@@ -97,18 +104,21 @@ plugin, then press Play.
 - Kernel 0.3.0 ignores the folder and boots the branch head: run `bun run packages` to get 0.3.1 into `node_modules`.
 
 ## Local @typetorch packages
-Until the packages are published, `@typetorch/framework` and `@typetorch/kernel` come from the sibling repos
-(`../framework`, `../kernel`) as packed tarballs in `.typetorch/packages/`. A plain `file:../framework` dependency
+Until the packages are published, `@typetorch/framework`, `@typetorch/kernel` and `@typetorch/transformer` come from
+the sibling repos (`../framework`, `../kernel`, `../transformer`) as packed tarballs in `.typetorch/packages/`. Once
+they are on npm, the `file:` entries become `^0.2.0` (`@typetorch/transformer` stays a devDependency: it runs only
+inside `rbxtsc`). A plain `file:../framework` dependency
 does not work with Bun on Windows: Bun copies the whole folder (`.git`, `node_modules`) and fails with EPERM. Bun also
 caches tarballs, so a re-packed tarball never reaches `node_modules` through `bun install` alone.
 
 After changing the framework, run:
 ```sh
-bun run packages          # = bun scripts/packages.ts: builds ../framework, packs both, extracts into node_modules
+bun run packages          # = bun scripts/packages.ts: builds ../framework and ../transformer, packs all three,
+                          #   extracts them into node_modules
 bun run build
 ```
 `bun install` re-extracts the tarballs afterwards (postinstall `--sync`), so it never brings back a stale copy.
-The payload maps only `node_modules/@typetorch/framework` (its `out/`), never the kernel.
+The payload maps only `node_modules/@typetorch/framework` (its `out/`), never the kernel or the transformer.
 
 ## Swap-safe rules
 - Everything a module creates or connects goes in `this.trove` (Instances, connections, threads, disconnect functions).

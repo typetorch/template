@@ -13,7 +13,7 @@
 		"strict": true,
 		"target": "ESNext",
 		// Every npm scope the game imports from must be a type root (roblox-ts rule).
-		"typeRoots": ["node_modules/@rbxts", "node_modules/@flamework", "node_modules/@typetorch"],
+		"typeRoots": ["node_modules/@rbxts", "node_modules/@typetorch"],
 		// Explicit global types: otherwise TypeScript auto-includes every folder in the type roots, and
 		// @typetorch/kernel (Luau only, no typings) fails with TS2688.
 		"types": ["types", "compiler-types"],
@@ -22,13 +22,14 @@
 		"outDir": "out",
 		"incremental": true,
 		"tsBuildInfoFile": "out/tsconfig.tsbuildinfo",
-		// Order matters: debug macros first, then Flamework (guards for createNetwork, DI ids for @Service/@Controller).
+		// Order matters: debug macros first, then @typetorch/transformer (guards for createNetwork, DI ids for
+		// @Service/@Controller, user macros written with Modding).
 		"plugins": [
 			{
 				"transform": "rbxts-transform-debug",
 				"environmentRequires": {}
 			},
-			{ "transform": "rbxts-transformer-flamework" }
+			{ "transform": "@typetorch/transformer" }
 		]
 	},
 	"include": ["./src/**/*.ts"]

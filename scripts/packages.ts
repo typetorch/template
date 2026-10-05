@@ -5,14 +5,15 @@
  * Windows that copy fails with EPERM. So the template depends on packed tarballs instead (exactly what npm would
  * ship, from each package's "files"):
  *
- *   .typetorch/packages/typetorch-framework.tgz   <- bun pm pack in ../framework (after `bun run build` there)
- *   .typetorch/packages/typetorch-kernel.tgz      <- bun pm pack in ../kernel
+ *   .typetorch/packages/typetorch-framework.tgz     <- bun pm pack in ../framework (after `bun run build` there)
+ *   .typetorch/packages/typetorch-kernel.tgz        <- bun pm pack in ../kernel
+ *   .typetorch/packages/typetorch-transformer.tgz   <- bun pm pack in ../transformer (after `bun run build` there)
  *
  * Bun caches tarballs by path, so a re-packed tarball would not reach node_modules through `bun install`. This
  * script therefore also extracts each tarball straight into node_modules/@typetorch/<name> (the "sync" step).
  *
- *   bun scripts/packages.ts           build framework, pack both, sync into node_modules   (after changing framework)
- *   bun scripts/packages.ts --no-build   pack both and sync, without rebuilding framework
+ *   bun scripts/packages.ts           build framework + transformer, pack all three, sync into node_modules
+ *   bun scripts/packages.ts --no-build   pack all three and sync, without rebuilding framework and transformer
  *   bun scripts/packages.ts --sync    only extract the existing tarballs (runs as postinstall)
  *
  * Packing also records where each tarball came from in .typetorch/packages/manifest.json (the git HEAD and whether the
@@ -29,6 +30,8 @@ const packagesDir = join(root, ".typetorch", "packages");
 const PACKAGES = [
 	{ name: "framework", source: resolve(root, "../framework"), build: true },
 	{ name: "kernel", source: resolve(root, "../kernel"), build: false },
+	// The compiler plugin (tsconfig "plugins"): Node code, never mapped into the payload.
+	{ name: "transformer", source: resolve(root, "../transformer"), build: true },
 ];
 
 const syncOnly = Bun.argv.includes("--sync");
