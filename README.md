@@ -1,7 +1,7 @@
 # TypeTorch starter game
 
-What `typetorch init` scaffolds: **Target Rush**, a round-based minigame that hot-swaps on live servers mid-round, plus
-the original lobby coins. It shows every framework feature: services and controllers with constructor injection,
+The starter game for a new TypeTorch project: **Target Rush**, a round-based minigame that hot-swaps on live servers
+mid-round, plus the original lobby coins. It shows every framework feature: services and controllers with constructor injection,
 lifecycle hooks, troves everywhere, `observePlayers`, nested guarded networking with rate limits, state that survives
 swaps (`persist`), the `TypeTorch` runtime API (update toasts, swap-out saves, branch changes, dev overlay), tagged
 elements with per-element troves, charm atoms for UI state, a code-built HUD and world, and the dev menu.
