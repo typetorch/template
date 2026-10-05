@@ -13,3 +13,7 @@ src/shared/build.ts
 .env.*
 # private working notes (kept locally, never pushed)
 CHANGELOG.md
+
+# CLI build helpers (typetorch build/deploy)
+.payload.gen.project.json
+.tsconfig.typetorch.json
