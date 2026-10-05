@@ -7,7 +7,7 @@
 	"scripts": {
 		"build": "bun scripts/build-info.ts && rbxtsc",
 		"compile": "rbxtsc",
-		"payload": "bun run build && rojo build default.project.json -o build/payload.rbxm",
+		"payload": "bun run build && node -e \"require('fs').mkdirSync('build',{recursive:true})\" && rojo build default.project.json -o build/payload.rbxm",
 		"watch": "bun scripts/build-info.ts && rbxtsc -w",
 		"studio": "rojo serve studio.project.json",
 		"typetorch": "typetorch",

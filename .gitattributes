@@ -1,0 +1,5 @@
+# LF everywhere: bun rewrites bun.lock with LF, which made Windows checkouts (core.autocrlf) look dirty
+* text=auto eol=lf
+*.rbxm binary
+*.rbxl binary
+*.png binary
