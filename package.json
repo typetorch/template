@@ -8,6 +8,8 @@
 		"build": "bun scripts/build-info.ts && rbxtsc",
 		"compile": "rbxtsc",
 		"payload": "bun run build && rojo build default.project.json -o build/payload.rbxm",
+		"watch": "bun scripts/build-info.ts && rbxtsc -w",
+		"studio": "rojo serve studio.project.json",
 		"packages": "bun scripts/packages.ts",
 		"postinstall": "bun scripts/packages.ts --sync"
 	},

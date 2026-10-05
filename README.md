@@ -25,6 +25,7 @@ src/shared/rush/{types,rules,palette}.ts   shared shapes, pure rules, colors
 src/shared/ui/{kit,icons}.ts               code-built UI kit; icons drawn from Frames (no images, no emojis)
 src/shared/build.ts                        GENERATED before every compile (git identity), gitignored
 default.project.json                       the payload: a Rojo Model with Server/, Shared/, Client/, include/
+studio.project.json                        Studio testing: the kernel + this payload as ServerStorage.TypeTorchDev.Payload
 typetorch.json                             project, place, branches, channels, members (read by the CLI)
 ```
 
@@ -70,6 +71,30 @@ bun run payload           # build + rojo build -> build/payload.rbxm
 - `bun scripts/build-info.ts --channel prod --dirty` writes `src/shared/build.ts` by hand (the CLI writes the same
   file). With `TYPETORCH_SKIP_BUILD_INFO=1`, `bun run build` keeps a `build.ts` the CLI already wrote.
 - Use `$print` / `$warn` / `$assert` from `rbxts-transform-debug`, never `print` / `warn` / `assert`.
+
+## Testing in Studio
+Run your local code in Studio with the real kernel, the dev menu and DataStores, without uploading anything.
+```sh
+bun run watch             # build info, then rbxtsc -w (recompiles out/ on every save)
+bun run studio            # in a second terminal: rojo serve studio.project.json
+```
+Open a place of this experience in Studio (DataStores need "Enable Studio Access to API Services"), connect the Rojo
+plugin, then press Play.
+- `studio.project.json` syncs the kernel from `node_modules/@typetorch/kernel` (the same tree as the kernel's place)
+  and the compiled payload (`out/`, `include/` and the packages, the same tree as `default.project.json`) into
+  `ServerStorage.TypeTorchDev.Payload`, plus the kernel place's baseplate and spawn.
+- In Studio, kernel 0.3.1+ mounts a clone of that Model instead of an uploaded artifact: id `local-<HHMMSS UTC>`,
+  branch `dev` (or the `Branch` attribute of `ServerStorage.TypeTorchDev`), dev channel. Server > Status shows
+  "Studio: local payload".
+- The payload holds only ModuleScripts, so nothing in it runs by itself: only the kernel's clone runs, once.
+- **Code changes need Stop + Play.** Rojo doesn't sync into a running play session. The dev menu's Reload remounts a
+  fresh clone of the same code: use it to test swaps (`persist`, `onSwapOut`, update toasts), not new code.
+- Deploys and the 60 s poll don't move a local session. A pin or branch switch in the dev menu still loads an uploaded
+  artifact, and Reload goes back to the local copy. To boot the branch head again, delete
+  `ServerStorage.TypeTorchDev.Payload` (with Rojo disconnected).
+- Don't save or publish the place from that session: live servers ignore the folder, but it bloats the place
+  (`typetorch doctor` warns). `typetorch kernel deploy` publishes the place.
+- Kernel 0.3.0 ignores the folder and boots the branch head: run `bun run packages` to get 0.3.1 into `node_modules`.
 
 ## Local @typetorch packages
 Until the packages are published, `@typetorch/framework` and `@typetorch/kernel` come from the sibling repos

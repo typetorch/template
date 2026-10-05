@@ -1,0 +1,93 @@
+{
+	"name": "TypeTorchStudio",
+	"globIgnorePaths": ["**/package.json", "**/tsconfig.json"],
+	"tree": {
+		"$className": "DataModel",
+		"HttpService": {
+			"$className": "HttpService",
+			"$properties": { "HttpEnabled": true }
+		},
+		"Workspace": {
+			"$className": "Workspace",
+			"Baseplate": {
+				"$className": "Part",
+				"$properties": {
+					"Anchored": true,
+					"Locked": true,
+					"Size": [512, 16, 512],
+					"Position": [0, -8, 0],
+					"Color": [0.36, 0.38, 0.42],
+					"Material": "SmoothPlastic",
+					"TopSurface": "Smooth",
+					"BottomSurface": "Smooth"
+				}
+			},
+			"SpawnLocation": {
+				"$className": "SpawnLocation",
+				"$properties": {
+					"Anchored": true,
+					"Neutral": true,
+					"Size": [12, 1, 12],
+					"Position": [0, 0.5, 0],
+					"Duration": 0,
+					"Color": [0.95, 0.75, 0.25],
+					"TopSurface": "Smooth",
+					"BottomSurface": "Smooth"
+				}
+			}
+		},
+		"ServerScriptService": {
+			"$className": "ServerScriptService",
+			"$properties": { "LoadStringEnabled": true },
+			"TypeTorchKernel": {
+				"$className": "Folder",
+				"Kernel": { "$path": "node_modules/@typetorch/kernel/src/server/Kernel.server.luau" },
+				"Api": { "$path": "node_modules/@typetorch/kernel/src/server/Api.luau" },
+				"Access": { "$path": "node_modules/@typetorch/kernel/src/server/Access.luau" },
+				"Logs": { "$path": "node_modules/@typetorch/kernel/src/server/Logs.luau" },
+				"Registry": { "$path": "node_modules/@typetorch/kernel/src/server/Registry.luau" },
+				"Transport": { "$path": "node_modules/@typetorch/kernel/src/server/Transport.luau" },
+				"Signing": { "$path": "node_modules/@typetorch/kernel/src/server/Signing.luau" },
+				"vendor": { "$path": "node_modules/@typetorch/kernel/src/server/vendor" },
+				"Entry": { "$path": "node_modules/@typetorch/kernel/src/server/Entry.server.luau", "$properties": { "Disabled": true } }
+			}
+		},
+		"ServerStorage": {
+			"$className": "ServerStorage",
+			"TypeTorchDev": {
+				"$className": "Folder",
+				"Payload": {
+					"$className": "Model",
+					"Server": { "$path": "out/server" },
+					"Shared": { "$path": "out/shared" },
+					"Client": { "$path": "out/client" },
+					"include": {
+						"$path": "include",
+						"node_modules": {
+							"$className": "Folder",
+							"@rbxts": { "$path": "node_modules/@rbxts" },
+							"@flamework": { "$path": "node_modules/@flamework" },
+							"@typetorch": {
+								"$className": "Folder",
+								"framework": { "$path": "node_modules/@typetorch/framework" }
+							}
+						}
+					}
+				}
+			}
+		},
+		"ReplicatedStorage": {
+			"$className": "ReplicatedStorage",
+			"TypeTorchKernelShared": {
+				"$className": "Folder",
+				"Constants": { "$path": "node_modules/@typetorch/kernel/src/shared/Constants.luau" },
+				"ClientApi": { "$path": "node_modules/@typetorch/kernel/src/shared/ClientApi.luau" },
+				"ClientEntry": { "$path": "node_modules/@typetorch/kernel/src/shared/ClientEntry.client.luau", "$properties": { "Disabled": true } }
+			}
+		},
+		"ReplicatedFirst": {
+			"$className": "ReplicatedFirst",
+			"TypeTorchKernelClient": { "$path": "node_modules/@typetorch/kernel/src/client/KernelClient.client.luau" }
+		}
+	}
+}
