@@ -1,4 +1,4 @@
-import { CollectionService, Workspace } from "@rbxts/services";
+import { CollectionService, Players, Workspace } from "@rbxts/services";
 import { ZONE_TAG, ZONE_VERSION, zoneBoxes } from "../../../shared/analytics/catalog";
 import { ARENA_RADIUS, PAD_OFFSET, PAD_RADIUS } from "../../../shared/rush/config";
 import { PALETTE } from "../../../shared/rush/palette";
@@ -20,13 +20,29 @@ const UP = new Vector3(0, 1, 0);
 
 export function computeLayout(): ArenaLayout {
 	const spawn = Workspace.FindFirstChildWhichIsA("SpawnLocation", true);
-	// The floor is a thin skin just above the ground the spawn stands on; the spawn pokes out in the middle.
-	const ground = spawn ? spawn.Position.Y - spawn.Size.Y / 2 : 0;
+	// The floor is a thin skin just above the ground the spawn stands on; the spawn pokes out in the middle. A thick
+	// baseplate can bury the spawn, so the ground is whichever is higher: the spawn's bottom or the solid surface there.
+	const ground = spawn ? math.max(spawn.Position.Y - spawn.Size.Y / 2, surfaceAt(spawn) ?? -math.huge) : 0;
 	const center = new Vector3(spawn ? spawn.Position.X : 0, ground + 0.06, spawn ? spawn.Position.Z : 0);
 	const pad = center.add(PAD_OFFSET).add(new Vector3(0, 0.4, 0));
 	const round = (value: number) => math.round(value * 10) / 10;
 	const key = `arena.v${ARENA_VERSION}|r${ARENA_RADIUS}|p${PAD_RADIUS}|${round(pad.X)},${round(pad.Z)}|${round(center.X)},${round(center.Y)},${round(center.Z)}`;
 	return { center, radius: ARENA_RADIUS, pad, key };
+}
+
+/** Top of the place's own solid ground at the spawn (ignoring the spawn, characters and what this game builds). */
+function surfaceAt(spawn: SpawnLocation): number | undefined {
+	const ignore: Instance[] = [spawn];
+	for (const name of ["TargetRushArena", "TargetRushTargets", "Coins"]) {
+		const built = Workspace.FindFirstChild(name);
+		if (built) ignore.push(built);
+	}
+	for (const player of Players.GetPlayers()) if (player.Character) ignore.push(player.Character);
+	const params = new RaycastParams();
+	params.FilterType = Enum.RaycastFilterType.Exclude;
+	params.FilterDescendantsInstances = ignore;
+	const result = Workspace.Raycast(spawn.Position.add(UP.mul(100)), UP.mul(-200), params);
+	return result?.Position.Y;
 }
 
 function part(parent: Instance, name: string, setup: (part: Part) => void) {

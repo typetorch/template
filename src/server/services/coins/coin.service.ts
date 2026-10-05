@@ -5,6 +5,7 @@ import { COIN_REASONS, EVENTS } from "../../../shared/analytics/catalog";
 import { network } from "../../../shared/net";
 import type { Phase } from "../../../shared/rush/types";
 import { AnalyticsService } from "../analytics/analytics.service";
+import { ArenaService } from "../rush/arena.service";
 import { RoundService } from "../rush/round.service";
 import { WalletService } from "./wallet.service";
 
@@ -15,8 +16,8 @@ const MAX_DISTANCE = 14;
 const RESPAWN_SECONDS = 4;
 
 /**
- * Lobby coins: a ring around the spawn, collectable between rounds (hidden while a round runs). WalletService and
- * RoundService come in through the constructor.
+ * Lobby coins: a ring around the spawn, collectable between rounds (hidden while a round runs). WalletService,
+ * RoundService and ArenaService come in through the constructor.
  */
 @Service()
 export class CoinService extends Module implements OnStart, OnTick {
@@ -29,6 +30,7 @@ export class CoinService extends Module implements OnStart, OnTick {
 		private readonly wallet: WalletService,
 		private readonly round: RoundService,
 		private readonly analytics: AnalyticsService,
+		private readonly arena: ArenaService,
 	) {
 		super();
 	}
@@ -40,8 +42,8 @@ export class CoinService extends Module implements OnStart, OnTick {
 		folder.Parent = Workspace;
 		this.folder = folder;
 
-		const spawn = Workspace.FindFirstChildWhichIsA("SpawnLocation", true);
-		const center = spawn ? spawn.Position : new Vector3(0, 0, 0);
+		// Around the arena center, on its floor (which sits on the place's ground, not inside a thick baseplate).
+		const center = this.arena.layout.center;
 		for (let index = 0; index < COIN_COUNT; index++) {
 			const angle = (index / COIN_COUNT) * math.pi * 2;
 			const position = center.add(new Vector3(math.cos(angle) * RING_RADIUS, 3, math.sin(angle) * RING_RADIUS));
