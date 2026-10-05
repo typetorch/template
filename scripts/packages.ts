@@ -1,24 +1,25 @@
 /**
- * Local @typetorch packages, until they are on npm: `bun scripts/packages.ts [--sync] [--no-build]`
+ * Local @typetorch packages: an optional override of the npm versions.
+ * `bun scripts/packages.ts [--sync] [--no-build] [--off]` (also `bun run packages`)
+ *
+ * The game depends on @typetorch/framework, kernel and transformer from npm. To build and deploy framework, kernel or
+ * transformer changes that aren't released yet, clone those repos next to the game and run `bun run packages`: it
+ * packs each checkout into .typetorch/packages/ (exactly what npm would ship, from each package's "files") and
+ * extracts it over node_modules/@typetorch/<name>. The override stays on across `bun install` (postinstall runs
+ * `--sync`) until `bun run packages --off`.
  *
  * Why not `file:../framework`? Bun copies a `file:` directory dependency wholesale (.git, node_modules, src) and on
- * Windows that copy fails with EPERM. So the template depends on packed tarballs instead (exactly what npm would
- * ship, from each package's "files"):
+ * Windows that copy fails with EPERM. Bun also caches tarballs by path, so this script extracts them itself.
  *
- *   .typetorch/packages/typetorch-framework.tgz     <- bun pm pack in ../framework (after `bun run build` there)
- *   .typetorch/packages/typetorch-kernel.tgz        <- bun pm pack in ../kernel
- *   .typetorch/packages/typetorch-transformer.tgz   <- bun pm pack in ../transformer (after `bun run build` there)
- *
- * Bun caches tarballs by path, so a re-packed tarball would not reach node_modules through `bun install`. This
- * script therefore also extracts each tarball straight into node_modules/@typetorch/<name> (the "sync" step).
- *
- *   bun scripts/packages.ts           build framework + transformer, pack all three, sync into node_modules
- *   bun scripts/packages.ts --no-build   pack all three and sync, without rebuilding framework and transformer
- *   bun scripts/packages.ts --sync    only extract the existing tarballs (runs as postinstall)
+ *   bun scripts/packages.ts              build framework + transformer, pack all three, extract into node_modules
+ *   bun scripts/packages.ts --no-build   pack all three and extract, without rebuilding framework and transformer
+ *   bun scripts/packages.ts --sync       re-extract the packed tarballs, if any (postinstall; silent without them)
+ *   bun scripts/packages.ts --off        remove the override and reinstall the npm versions
  *
  * Packing also records where each tarball came from in .typetorch/packages/manifest.json (the git HEAD and whether the
  * checkout had uncommitted changes). `typetorch build` stamps those commits into the payload ("sources") and lists
- * the commits since the previous deploy as the artifact's "what changed" lines:
+ * the commits since the previous deploy as the artifact's "what changed" lines (without the override it stamps the
+ * npm versions):
  *   { "schema": 1, "packages": { "framework": { "version", "commit", "commitHash", "dirty", "path", "packedAt" }, ... } }
  */
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -36,6 +37,7 @@ const PACKAGES = [
 
 const syncOnly = Bun.argv.includes("--sync");
 const noBuild = Bun.argv.includes("--no-build");
+const off = Bun.argv.includes("--off");
 
 const manifestPath = join(packagesDir, "manifest.json");
 
@@ -101,6 +103,17 @@ function extract(tarball: string, destination: string) {
 	}
 }
 
+if (off) {
+	// Back to the npm versions: drop the tarballs (and their manifest), then let bun reinstall node_modules/@typetorch.
+	rmSync(packagesDir, { recursive: true, force: true });
+	for (const pkg of PACKAGES) rmSync(join(root, "node_modules", "@typetorch", pkg.name), { recursive: true, force: true });
+	run(["bun", "install", "--force"], root);
+	console.log("packages: local override off; @typetorch packages come from npm");
+	process.exit(0);
+}
+// postinstall on a game without the override: nothing to do, say nothing.
+if (syncOnly && !existsSync(packagesDir)) process.exit(0);
+
 mkdirSync(packagesDir, { recursive: true });
 const manifest = readManifest();
 for (const pkg of PACKAGES) {
@@ -120,12 +133,12 @@ for (const pkg of PACKAGES) {
 		console.log(`packages: @typetorch/${pkg.name} ${version ?? "?"} packed from ${source ? `${source.commit}${source.dirty ? " (dirty)" : ""}` : "a folder without git"}`);
 	}
 	if (!existsSync(tarball)) {
-		console.warn(`packages: ${tarball} is missing; run \`bun scripts/packages.ts\` first`);
+		if (!syncOnly) console.warn(`packages: ${tarball} is missing`);
 		continue;
 	}
 	const installed = join(root, "node_modules", "@typetorch", pkg.name);
 	if (!existsSync(join(root, "node_modules"))) continue;
 	rmSync(installed, { recursive: true, force: true });
 	extract(tarball, installed);
-	console.log(`packages: @typetorch/${pkg.name} -> node_modules`);
+	console.log(`packages: @typetorch/${pkg.name} -> node_modules (local override; "bun run packages --off" for npm)`);
 }

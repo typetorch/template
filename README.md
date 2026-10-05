@@ -63,10 +63,10 @@ on, and the board counts "Updated live xN". Arena knobs (`ARENA_RADIUS`, `PAD_*`
 
 ## Build
 ```sh
-bun scripts/packages.ts   # first time only, until @typetorch/* is on npm (see below)
-bun install
+bun install               # @typetorch/* from npm (framework, kernel, transformer, cli, dev-server)
 bun run build             # writes src/shared/build.ts, then rbxtsc
 bun run payload           # build + rojo build -> build/payload.rbxm
+bun run typetorch build   # the CLI (@typetorch/cli): the payload exactly as a deploy uploads it
 ```
 - `bun scripts/build-info.ts --channel prod --dirty` writes `src/shared/build.ts` by hand (the CLI writes the same
   file). With `TYPETORCH_SKIP_BUILD_INFO=1`, `bun run build` keeps a `build.ts` the CLI already wrote.
@@ -75,7 +75,8 @@ bun run payload           # build + rojo build -> build/payload.rbxm
   `@typetorch/transformer` (the type guards `createNetwork` checks every message with, the constructor dependency ids
   of `@Service` / `@Controller`, and your own `Modding` macros). No Flamework: `Modding`, `Reflect` and `t` come from
   `@typetorch/framework`, and only that package is mapped into the payload.
-- `bun run payload` then `lune run ../framework/scripts/test-generations.luau build/payload.rbxm` boots two
+- With a framework checkout next to the game, `bun run payload` then
+  `lune run ../framework/scripts/test-generations.luau build/payload.rbxm` boots two
   generations of the payload under Lune and checks that each gets a fresh registry, that every service and controller
   registers and resolves its dependencies, and that the network guards work.
 
@@ -101,25 +102,23 @@ plugin, then press Play.
   `ServerStorage.TypeTorchDev.Payload` (with Rojo disconnected).
 - Don't save or publish the place from that session: live servers ignore the folder, but it bloats the place
   (`typetorch doctor` warns). `typetorch kernel deploy` publishes the place.
-- Kernel 0.3.0 ignores the folder and boots the branch head: run `bun run packages` to get 0.3.1 into `node_modules`.
+- Kernel 0.3.0 ignores the folder and boots the branch head: it needs `@typetorch/kernel` 0.3.1 or newer.
 
-## Local @typetorch packages
-The packages are on npm, but this template still takes `@typetorch/framework`, `@typetorch/kernel` and
-`@typetorch/transformer` from the sibling repos (`../framework`, `../kernel`, `../transformer`) as packed tarballs in
-`.typetorch/packages/`, so unreleased framework and kernel changes can be deployed. To use npm instead, change the
-`file:` entries to `^0.2.0` (kernel `^0.3.1`; `@typetorch/transformer` stays a devDependency: it runs only inside
-`rbxtsc`) and delete the `postinstall` and `packages` scripts. A plain `file:../framework` dependency
-does not work with Bun on Windows: Bun copies the whole folder (`.git`, `node_modules`) and fails with EPERM. Bun also
-caches tarballs, so a re-packed tarball never reaches `node_modules` through `bun install` alone.
-
-After changing the framework, run:
+## Unreleased framework or kernel changes
+The game takes `@typetorch/*` from npm. To build and deploy changes to the framework, kernel or transformer that
+aren't released yet, clone those repos next to the game (`../framework`, `../kernel`, `../transformer`) and run:
 ```sh
-bun run packages          # = bun scripts/packages.ts: builds ../framework and ../transformer, packs all three,
-                          #   extracts them into node_modules
+bun run packages          # builds ../framework and ../transformer, packs all three into .typetorch/packages/,
+                          #   extracts them over node_modules/@typetorch (a local override)
 bun run build
 ```
-`bun install` re-extracts the tarballs afterwards (postinstall `--sync`), so it never brings back a stale copy.
-The payload maps only `node_modules/@typetorch/framework` (its `out/`), never the kernel or the transformer.
+- The override stays on across `bun install` (postinstall re-extracts the tarballs) until
+  `bun run packages --off`, which deletes them and reinstalls the npm versions.
+- `typetorch build` stamps the checkouts' commits as the payload's sources (from `.typetorch/packages/manifest.json`);
+  without the override it stamps the npm versions.
+- Why tarballs: a plain `file:../framework` dependency does not work with Bun on Windows (Bun copies the whole folder,
+  `.git` and `node_modules` too, and fails with EPERM), and Bun caches tarballs, so the script extracts them itself.
+- The payload maps only `node_modules/@typetorch/framework` (its `out/`), never the kernel or the transformer.
 
 ## Swap-safe rules
 - Everything a module creates or connects goes in `this.trove` (Instances, connections, threads, disconnect functions).
@@ -132,5 +131,5 @@ The payload maps only `node_modules/@typetorch/framework` (its `out/`), never th
 
 ## Claude tab (remote-claude)
 On a dev-channel private server, the dev menu's Claude tab sends prompts to Claude Code on a dev's machine while
-`typetorch remote-claude --users <ids>` (the CLI runs `@typetorch/dev-server`) runs there. Paste the code it prints into the
+`bun run typetorch remote-claude --users <ids>` (the CLI runs `@typetorch/dev-server`) runs there. Paste the code it prints into the
 Claude tab once per session (no Roblox secret needed), and turn on HTTP requests for the experience.

@@ -10,6 +10,7 @@
 		"payload": "bun run build && rojo build default.project.json -o build/payload.rbxm",
 		"watch": "bun scripts/build-info.ts && rbxtsc -w",
 		"studio": "rojo serve studio.project.json",
+		"typetorch": "typetorch",
 		"packages": "bun scripts/packages.ts",
 		"postinstall": "bun scripts/packages.ts --sync"
 	},
@@ -18,14 +19,16 @@
 		"@rbxts/services": "^1.6.0",
 		"@rbxts/t": "^3.2.1",
 		"@rbxts/trove": "^1.3.0",
-		"@typetorch/framework": "file:.typetorch/packages/typetorch-framework.tgz",
-		"@typetorch/kernel": "file:.typetorch/packages/typetorch-kernel.tgz",
+		"@typetorch/framework": "^0.2.0",
+		"@typetorch/kernel": "^0.3.1",
 		"rbxts-transform-debug": "2.2.0"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "^3.0.0-types.0",
 		"@rbxts/types": "^1.0.956",
-		"@typetorch/transformer": "file:.typetorch/packages/typetorch-transformer.tgz",
+		"@typetorch/cli": "^0.6.0",
+		"@typetorch/dev-server": "^0.2.0",
+		"@typetorch/transformer": "^0.2.0",
 		"roblox-ts": "^3.0.0",
 		"typescript": "5.5.3"
 	},
