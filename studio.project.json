@@ -48,6 +48,7 @@
 				"Registry": { "$path": "node_modules/@typetorch/kernel/src/server/Registry.luau" },
 				"Transport": { "$path": "node_modules/@typetorch/kernel/src/server/Transport.luau" },
 				"Signing": { "$path": "node_modules/@typetorch/kernel/src/server/Signing.luau" },
+				"Fleet": { "$path": "node_modules/@typetorch/kernel/src/server/Fleet.luau" },
 				"vendor": { "$path": "node_modules/@typetorch/kernel/src/server/vendor" },
 				"Entry": { "$path": "node_modules/@typetorch/kernel/src/server/Entry.server.luau", "$properties": { "Disabled": true } }
 			}
