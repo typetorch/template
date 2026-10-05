@@ -131,5 +131,5 @@ The payload maps only `node_modules/@typetorch/framework` (its `out/`), never th
 
 ## Claude tab (remote-claude)
 On a dev-channel private server, the dev menu's Claude tab sends prompts to Claude Code on a dev's machine while
-`typetorch remote-claude --users <ids>` runs there. Paste the pairing code that typetorch-dev-server prints into the
+`typetorch remote-claude --users <ids>` (the CLI runs `@typetorch/dev-server`) runs there. Paste the code it prints into the
 Claude tab once per session (no Roblox secret needed), and turn on HTTP requests for the experience.
