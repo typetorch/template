@@ -2,8 +2,9 @@
 # Optional dev deploy: on a push to a DEV-channel branch, when the repo secret OPENCLOUD_API_KEY exists, the TypeTorch
 # action uploads the payload and deploys it (prod-channel branches are skipped here: prod is approved and signed on
 # your PC with `typetorch deploy`). Deploys from CI publish only with typetorch.json "approval": "prod" (this
-# template's) or "none", and need the key to read and write the registry (universe:read + universe:write), so CI takes
-# the right seq. Key scopes: see the CLI README ("Keys").
+# template's) or "none", and need a shared seq source so CI takes the right deploy number: the key needs
+# universe-datastores.objects:read (+ :create and :update to claim seqs atomically); the action stops before uploading
+# without it (require-shared-seq). Key scopes: see the CLI README ("Keys").
 name: CI
 
 on:
