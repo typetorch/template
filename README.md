@@ -104,10 +104,11 @@ plugin, then press Play.
 - Kernel 0.3.0 ignores the folder and boots the branch head: run `bun run packages` to get 0.3.1 into `node_modules`.
 
 ## Local @typetorch packages
-Until the packages are published, `@typetorch/framework`, `@typetorch/kernel` and `@typetorch/transformer` come from
-the sibling repos (`../framework`, `../kernel`, `../transformer`) as packed tarballs in `.typetorch/packages/`. Once
-they are on npm, the `file:` entries become `^0.2.0` (`@typetorch/transformer` stays a devDependency: it runs only
-inside `rbxtsc`). A plain `file:../framework` dependency
+The packages are on npm, but this template still takes `@typetorch/framework`, `@typetorch/kernel` and
+`@typetorch/transformer` from the sibling repos (`../framework`, `../kernel`, `../transformer`) as packed tarballs in
+`.typetorch/packages/`, so unreleased framework and kernel changes can be deployed. To use npm instead, change the
+`file:` entries to `^0.2.0` (kernel `^0.3.1`; `@typetorch/transformer` stays a devDependency: it runs only inside
+`rbxtsc`) and delete the `postinstall` and `packages` scripts. A plain `file:../framework` dependency
 does not work with Bun on Windows: Bun copies the whole folder (`.git`, `node_modules`) and fails with EPERM. Bun also
 caches tarballs, so a re-packed tarball never reaches `node_modules` through `bun install` alone.
 
