@@ -1,6 +1,6 @@
-import { MarketplaceService, Players } from "@rbxts/services";
+import { DataStoreService, MarketplaceService, Players } from "@rbxts/services";
 import type { Trove } from "@rbxts/trove";
-import { Module, observePlayers, Service, setNetworkLimits, type OnInit, type OnStart, type ProperReturns } from "@typetorch/framework";
+import { Module, observePlayers, Service, setNetworkLimits, TypeTorch, type OnInit, type OnStart, type ProperReturns } from "@typetorch/framework";
 import { $warn } from "rbxts-transform-debug";
 import { COIN_REASONS, EVENTS } from "../../../shared/analytics/catalog";
 import { network } from "../../../shared/net";
@@ -22,11 +22,24 @@ interface ShopStore {
 	owned: Map<number, string[]>;
 	/** userId -> equipped trail id. */
 	equipped: Map<number, string>;
-	/** Receipt PurchaseIds already granted: a receipt Roblox sends again never pays twice. */
+	/** Receipt PurchaseIds granted on this server (and recorded in the receipts DataStore): answered at once. */
 	granted: Map<string, boolean>;
 }
 
+/** One key per PurchaseId in the receipts DataStore: which server recorded (and so granted) the purchase. */
+interface ReceiptRecord {
+	/** The buyer's UserId. */
+	u: number;
+	/** The product id. */
+	p: number;
+	/** The JobId of the server that recorded it. */
+	j: string;
+	/** os.time() when it was recorded. */
+	t: number;
+}
+
 const WHERE = "shop";
+const RECEIPTS_VERSION = "v1";
 
 /**
  * The coin shop: trails bought with coins (the game's coin sink) and, only when a real developer product id is set in
@@ -35,10 +48,15 @@ const WHERE = "shop";
  * for the pack: purchase_prompt_shown / _accepted / _cancelled and purchase() once the receipt is granted.
  *
  * With the placeholder id (0) nothing Robux-related runs: no ProcessReceipt, no prompt, nothing to charge.
+ *
+ * Receipts are recorded durably (a DataStore split by channel) before PurchaseGranted: persist is this server's memory
+ * only, and Roblox may send the same receipt again to another server after the player left.
  */
 @Service()
 export class ShopService extends Module implements OnInit, OnStart {
 	private store!: ShopStore;
+	/** The receipts DataStore (coin pack only), undefined until it opened. */
+	private receipts?: DataStore;
 	/** The pack's price in Robux (read once per generation), 0 until known or when the pack is off. */
 	private packRobux = 0;
 	/** userId -> os.clock() the coin pack prompt opened (per generation: a prompt doesn't outlive a swap's analytics). */
@@ -222,6 +240,11 @@ export class ShopService extends Module implements OnInit, OnStart {
 	// Robux coin pack (only with a real developer product id) ---------------------------------------------------------
 
 	private startCoinPack() {
+		// Split by channel like every store: dev servers never touch prod receipts.
+		const name = TypeTorch.channel === "prod" ? `TargetRushReceipts_${RECEIPTS_VERSION}` : `TargetRushReceipts_${RECEIPTS_VERSION}_${TypeTorch.channel}`;
+		const [opened, dataStore] = pcall(() => DataStoreService.GetDataStore(name));
+		if (opened) this.receipts = dataStore;
+		else $warn(`coin pack: no receipts DataStore (${dataStore}); receipts wait until a server can record them`);
 		MarketplaceService.ProcessReceipt = (receipt) => this.receipt(receipt);
 		// The callback belongs to this generation: the next one sets its own. A receipt in between waits and is retried.
 		this.trove.add(() => {
@@ -252,13 +275,42 @@ export class ShopService extends Module implements OnInit, OnStart {
 		);
 	}
 
+	/**
+	 * Grants the pack once per PurchaseId, across servers and swaps. NotProcessedYet makes Roblox send the receipt again
+	 * later (the next join, or a while after), so every "not now" below is safe.
+	 */
 	private receipt(receipt: ReceiptInfo): Enum.ProductPurchaseDecision {
 		if (receipt.ProductId !== COIN_PACK_PRODUCT_ID) return Enum.ProductPurchaseDecision.NotProcessedYet;
-		if (this.store.granted.has(receipt.PurchaseId)) return Enum.ProductPurchaseDecision.PurchaseGranted;
-		// Coins live in this server: grant only while the player is here (Roblox retries the receipt later otherwise).
+		const id = receipt.PurchaseId;
+		if (this.store.granted.has(id)) return Enum.ProductPurchaseDecision.PurchaseGranted;
+		// Coins live in this server: grant only while the player is here.
 		const player = Players.GetPlayerByUserId(receipt.PlayerId);
-		if (!player) return Enum.ProductPurchaseDecision.NotProcessedYet;
-		this.store.granted.set(receipt.PurchaseId, true);
+		const receipts = this.receipts;
+		if (!player || !receipts) return Enum.ProductPurchaseDecision.NotProcessedYet;
+		if (DataStoreService.GetRequestBudgetForRequestType(Enum.DataStoreRequestType.UpdateAsync) < 1) {
+			return Enum.ProductPurchaseDecision.NotProcessedYet;
+		}
+		// Record first, grant second. The record names the server that wrote it: another server's record means it was
+		// granted there; this server's record without a grant means a swap cut the previous try off right after the
+		// write (the hard stop ends a yielding thread), so it is granted now.
+		let recordedBy: string | undefined;
+		const [ok, err] = pcall(() =>
+			receipts.UpdateAsync<unknown, ReceiptRecord>(`receipt_${id}`, (old) => {
+				if (typeIs(old, "table")) {
+					recordedBy = (old as ReceiptRecord).j;
+					return $tuple(undefined); // already recorded: no write
+				}
+				recordedBy = game.JobId;
+				const record: ReceiptRecord = { u: receipt.PlayerId, p: receipt.ProductId, j: game.JobId, t: os.time() };
+				return $tuple(record, [receipt.PlayerId]);
+			}),
+		);
+		if (!ok) {
+			$warn(`receipt ${id} not recorded (${err}); Roblox sends it again later`);
+			return Enum.ProductPurchaseDecision.NotProcessedYet;
+		}
+		this.store.granted.set(id, true);
+		if (recordedBy !== game.JobId) return Enum.ProductPurchaseDecision.PurchaseGranted; // granted on another server
 		this.wallet.add(player, COIN_PACK_COINS, COIN_REASONS.coinPack);
 		this.analytics.purchase(player, { product: receipt.ProductId, robux: receipt.CurrencySpent, where: WHERE });
 		this.changed(player);
