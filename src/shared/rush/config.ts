@@ -11,6 +11,8 @@
 // Round flow ----------------------------------------------------------------------------------------------------------
 /** Length of a round. Changing it mid-round moves the end of the running round. */
 export const ROUND_SECONDS = 60;
+/** Experiment round_length (analytics catalog): a round where every player has the "short" variant lasts this long. */
+export const ROUND_SECONDS_SHORT = 45;
 /** The lobby starts the next round on its own after this long (if anyone is in the server). */
 export const LOBBY_SECONDS = 20;
 export const COUNTDOWN_SECONDS = 3;
@@ -81,6 +83,10 @@ export const HIT_GRACE = 0.2;
 export const MAX_LAG_COMPENSATION = 0.2;
 /** Minimum seconds between two hits of one player. */
 export const HIT_COOLDOWN = 0.07;
+
+// Experiments ---------------------------------------------------------------------------------------------------------
+/** Experiment aim_assist: the "generous" variant widens the click/tap/gamepad tolerance around targets this much. */
+export const AIM_ASSIST_GENEROUS = 1.6;
 
 // Personal best -------------------------------------------------------------------------------------------------------
 /**

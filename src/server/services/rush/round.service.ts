@@ -10,6 +10,7 @@ import {
 	type OnTick,
 } from "@typetorch/framework";
 import { $print, $warn } from "rbxts-transform-debug";
+import { COIN_REASONS, COMBO_LOST_MIN, EVENTS } from "../../../shared/analytics/catalog";
 import { network } from "../../../shared/net";
 import { COMBO_WINDOW, GOLDEN_COINS, HIT_COOLDOWN, PAD_HOLD_SECONDS, POINTS_PER_COIN } from "../../../shared/rush/config";
 import { multiplierFor, phaseSeconds, pointsFor, roundProgress } from "../../../shared/rush/rules";
@@ -25,6 +26,7 @@ import type {
 	RoundResults,
 	RushSnapshot,
 } from "../../../shared/rush/types";
+import { AnalyticsService } from "../analytics/analytics.service";
 import { WalletService } from "../coins/wallet.service";
 import { ArenaService } from "./arena.service";
 import { BestService } from "./best.service";
@@ -42,6 +44,16 @@ interface PlayerRound {
 	hits: number;
 	perfects: number;
 	golds: number;
+	// Analytics tallies (optional: a round persisted by an older generation has none yet).
+	greats?: number;
+	/** Clicks or taps on empty air. */
+	whiffs?: number;
+	/** Hits the server refused, and how many of those were taken by someone else first. */
+	refused?: number;
+	contested?: number;
+	/** Server time the player joined the round, and whether that was after it started. */
+	joinedAt?: number;
+	late?: boolean;
 }
 
 /**
@@ -61,15 +73,26 @@ interface RoundStore {
 	players: Map<number, PlayerRound>;
 	results?: RoundResults;
 	mine: Map<number, PersonalResult>;
+	/** Experiment round_length: this round is a short one (every player in it had the "short" variant). */
+	short?: boolean;
+	/** Targets spawned and targets nobody hit, this round (analytics). */
+	targets?: number;
+	expired?: number;
 }
 
 function now() {
 	return Workspace.GetServerTimeNow();
 }
 
+function round2(value: number) {
+	return math.round(value * 100) / 100;
+}
+
 /**
  * Target Rush rounds, server-authoritative: lobby -> countdown -> round -> results -> lobby. Owns the scores and
- * combos; TargetService validates hits and asks this service to score them.
+ * combos; TargetService validates hits and asks this service to score them. Analytics: the round_length experiment
+ * (decided at the countdown), combo milestones and lost combos, first hits, round_end per player and a server-only
+ * round_queued / round_started / round_summary per round (JourneyService does the phase-driven activities and steps).
  */
 @Service()
 export class RoundService extends Module implements OnInit, OnStart, OnTick {
@@ -82,6 +105,7 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 		private readonly wallet: WalletService,
 		private readonly best: BestService,
 		private readonly board: BoardService,
+		private readonly analytics: AnalyticsService,
 	) {
 		super();
 	}
@@ -149,7 +173,7 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 			}
 			this.checkPad(at);
 			const held = store.padSince > 0 && at - store.padSince >= PAD_HOLD_SECONDS;
-			if (held || at >= this.endsAt()) this.setPhase("countdown", at);
+			if (held || at >= this.endsAt()) this.setPhase("countdown", at, held ? "pad" : "timer");
 		} else if (store.phase === "countdown") {
 			if (at >= this.endsAt()) this.setPhase("round", at);
 		} else if (store.phase === "round") {
@@ -175,7 +199,7 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 
 	/** 0..1 through the running round (drives the difficulty ramp). */
 	progress(at: number): number {
-		return roundProgress(at, this.store.phaseStartedAt);
+		return roundProgress(at, this.store.phaseStartedAt, this.isShort());
 	}
 
 	activePlayers(): number {
@@ -183,7 +207,35 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 	}
 
 	endsAt(): number {
-		return this.store.phaseStartedAt + phaseSeconds(this.store.phase);
+		return this.store.phaseStartedAt + phaseSeconds(this.store.phase, this.isShort());
+	}
+
+	/** The running (or last) round is a short one (experiment round_length). */
+	isShort(): boolean {
+		return this.store.short === true;
+	}
+
+	/** The player has a result card this results phase (false: they joined after the round). */
+	hasResult(player: Player): boolean {
+		return this.store.phase === "results" && this.store.mine.has(player.UserId);
+	}
+
+	// Analytics tallies (TargetService reports; round_end and round_summary carry them) ------------------------------------
+
+	noteTargetSpawned() {
+		this.store.targets = (this.store.targets ?? 0) + 1;
+	}
+
+	noteTargetExpired() {
+		this.store.expired = (this.store.expired ?? 0) + 1;
+	}
+
+	/** A hit the server refused (`contested`: someone else took the target first). */
+	noteRefused(player: Player, contested: boolean) {
+		const entry = this.store.players.get(player.UserId);
+		if (!entry || this.store.phase !== "round") return;
+		entry.refused = (entry.refused ?? 0) + 1;
+		if (contested) entry.contested = (entry.contested ?? 0) + 1;
 	}
 
 	phaseInfo(): PhaseInfo {
@@ -208,7 +260,8 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 	/** Scores a validated hit: combo, multiplier, points, coins for golden targets. */
 	scoreHit(player: Player, targetId: number, grade: Grade, golden: boolean, at: number): HitResult {
 		const entry = this.join(player);
-		if (at - entry.lastHitAt > COMBO_WINDOW) entry.combo = 0;
+		this.expireCombo(player, entry, at);
+		const before = multiplierFor(entry.combo);
 		entry.combo += 1;
 		entry.bestCombo = math.max(entry.bestCombo, entry.combo);
 		const multiplier = multiplierFor(entry.combo);
@@ -217,21 +270,40 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 		entry.hits += 1;
 		entry.lastHitAt = at;
 		if (grade === "perfect") entry.perfects += 1;
+		if (grade === "great") entry.greats = (entry.greats ?? 0) + 1;
 		if (golden) entry.golds += 1;
 		const coins = golden ? GOLDEN_COINS : 0;
-		if (coins > 0) this.wallet.add(player, coins);
+		if (coins > 0) this.wallet.add(player, coins, COIN_REASONS.goldenTarget);
+		if (multiplier > before) {
+			this.analytics.track(player, EVENTS.comboMilestone, { combo: entry.combo, multiplier, progress: round2(this.progress(at)) });
+		}
+		if (entry.hits === 1) {
+			this.analytics.roundStep(player, this.store.round, "first_hit");
+			this.analytics.step(player, "onboarding", "first_hit");
+		}
 		this.board.setLive(this.liveRows());
 		network.server.rush.me.fire(player, this.statsFor(player));
 		return { targetId, grade, points, combo: entry.combo, multiplier, golden, score: entry.score, coins };
 	}
 
-	/** A click on empty air ends the combo. */
+	/** A click on empty air: counted, and it ends the combo. */
 	breakCombo(player: Player) {
 		if (this.store.phase !== "round") return;
 		const entry = this.store.players.get(player.UserId);
-		if (!entry || entry.combo === 0) return;
+		if (!entry) return;
+		entry.whiffs = (entry.whiffs ?? 0) + 1;
+		this.expireCombo(player, entry, now());
+		if (entry.combo === 0) return;
+		if (entry.combo >= COMBO_LOST_MIN) this.analytics.track(player, EVENTS.comboLost, { combo: entry.combo, why: "whiff" });
 		entry.combo = 0;
 		network.server.rush.me.fire(player, this.statsFor(player));
+	}
+
+	/** A combo that ran out of time ends here (a long one is logged as lost). */
+	private expireCombo(player: Player, entry: PlayerRound, at: number) {
+		if (entry.combo === 0 || at - entry.lastHitAt <= COMBO_WINDOW) return;
+		if (entry.combo >= COMBO_LOST_MIN) this.analytics.track(player, EVENTS.comboLost, { combo: entry.combo, why: "timeout" });
+		entry.combo = 0;
 	}
 
 	statsFor(player: Player): MyStats {
@@ -266,7 +338,18 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 	private join(player: Player): PlayerRound {
 		let entry = this.store.players.get(player.UserId);
 		if (!entry) {
-			entry = { name: player.DisplayName, score: 0, combo: 0, bestCombo: 0, lastHitAt: 0, hits: 0, perfects: 0, golds: 0 };
+			entry = {
+				name: player.DisplayName,
+				score: 0,
+				combo: 0,
+				bestCombo: 0,
+				lastHitAt: 0,
+				hits: 0,
+				perfects: 0,
+				golds: 0,
+				joinedAt: now(),
+				late: this.store.phase === "round",
+			};
 			this.store.players.set(player.UserId, entry);
 		}
 		return entry;
@@ -302,8 +385,10 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 		else if (this.store.padSince === 0) this.setPad(at);
 	}
 
-	private setPhase(phase: Phase, at: number) {
+	/** `by`: what started a countdown (the start pad or the lobby timer). */
+	private setPhase(phase: Phase, at: number, by?: "pad" | "timer") {
 		const store = this.store;
+		const lobbySeconds = at - store.phaseStartedAt;
 		store.phase = phase;
 		store.phaseStartedAt = at;
 		this.setPad(0);
@@ -313,12 +398,31 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 			store.players.clear();
 			store.results = undefined;
 			store.mine.clear();
+			store.targets = 0;
+			store.expired = 0;
 			const players = Players.GetPlayers();
+			// Experiment round_length: short only when everyone here has the short variant (a player whose variant isn't
+			// known yet counts as the control), so a mixed server plays normal rounds.
+			store.short = players.size() > 0 && players.every((player) => this.analytics.variant(player, "round_length") === "short");
 			players.forEach((player, index) => {
 				this.join(player);
 				// Only players who wandered off are brought back; everyone else stays where they are.
 				const root = rootOf(player);
 				if (root && !this.arena.inside(root.Position)) player.Character?.PivotTo(this.arena.spot(index, players.size()));
+			});
+			this.analytics.track(undefined, EVENTS.roundQueued, {
+				round: store.round,
+				by: by ?? "timer",
+				lobby_secs: math.floor(lobbySeconds),
+				players: players.size(),
+				length: store.short ? "short" : "normal",
+			});
+		} else if (phase === "round") {
+			this.analytics.track(undefined, EVENTS.roundStarted, {
+				round: store.round,
+				players: store.players.size(),
+				length: this.isShort() ? "short" : "normal",
+				secs: phaseSeconds("round", this.isShort()),
 			});
 		} else if (phase === "lobby") {
 			store.results = undefined;
@@ -347,14 +451,18 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 		const results: RoundResults = { round: store.round, rows, swaps: store.swaps };
 		store.results = results;
 
+		const length = this.isShort() ? "short" : "normal";
+		const played = at - store.phaseStartedAt;
 		for (const player of Players.GetPlayers()) {
 			const entry = store.players.get(player.UserId);
 			if (!entry) continue;
 			const coins = math.floor(entry.score / POINTS_PER_COIN);
-			if (coins > 0) this.wallet.add(player, coins);
+			if (coins > 0) this.wallet.add(player, coins, COIN_REASONS.roundReward);
+			const previousBest = this.best.get(player);
 			const newBest = this.best.submit(player, entry.score);
+			const rank = rows.findIndex((result) => result.userId === player.UserId) + 1;
 			store.mine.set(player.UserId, {
-				rank: rows.findIndex((result) => result.userId === player.UserId) + 1,
+				rank,
 				score: entry.score,
 				bestCombo: entry.bestCombo,
 				perfects: entry.perfects,
@@ -364,7 +472,56 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 				newBest,
 				personalBest: this.best.get(player),
 			});
+			this.expireCombo(player, entry, at);
+			this.analytics.roundStep(player, store.round, "finished");
+			this.analytics.step(player, "onboarding", "round_finished");
+			this.analytics.track(player, EVENTS.roundEnd, {
+				round: store.round,
+				score: entry.score,
+				placement: rank,
+				players: rows.size(),
+				duration: math.floor(played),
+				played: math.floor(at - math.max(entry.joinedAt ?? 0, store.phaseStartedAt)),
+				length,
+				late: entry.late === true,
+				hits: entry.hits,
+				perfects: entry.perfects,
+				greats: entry.greats ?? 0,
+				goods: entry.hits - entry.perfects - (entry.greats ?? 0),
+				golds: entry.golds,
+				best_combo: entry.bestCombo,
+				whiffs: entry.whiffs ?? 0,
+				refused: entry.refused ?? 0,
+				contested: entry.contested ?? 0,
+				targets: store.targets ?? 0,
+				expired: store.expired ?? 0,
+				coins: coins + entry.golds * GOLDEN_COINS,
+				personal_best: this.best.get(player),
+				new_best: newBest,
+				swaps: store.swaps,
+				session_rounds: this.analytics.roundsJoined(player),
+			});
+			if (newBest) {
+				this.analytics.track(player, EVENTS.personalBest, {
+					score: entry.score,
+					previous: previousBest,
+					gain: entry.score - previousBest,
+					first: previousBest === 0,
+					session_rounds: this.analytics.roundsJoined(player),
+				});
+			}
 		}
+		this.analytics.track(undefined, EVENTS.roundSummary, {
+			round: store.round,
+			players: rows.size(),
+			left: rows.filter((row) => Players.GetPlayerByUserId(row.userId) === undefined).size(),
+			duration: math.floor(played),
+			length,
+			top: rows[0]?.score ?? 0,
+			targets: store.targets ?? 0,
+			expired: store.expired ?? 0,
+			swaps: store.swaps,
+		});
 		this.board.recordRound(rows);
 		this.setPhase("results", at);
 		for (const player of Players.GetPlayers()) {

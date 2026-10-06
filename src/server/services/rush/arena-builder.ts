@@ -1,4 +1,5 @@
 import { CollectionService, Workspace } from "@rbxts/services";
+import { ZONE_TAG, ZONE_VERSION, zoneBoxes } from "../../../shared/analytics/catalog";
 import { ARENA_RADIUS, PAD_OFFSET, PAD_RADIUS } from "../../../shared/rush/config";
 import { PALETTE } from "../../../shared/rush/palette";
 import { PAD_TAG } from "../../../shared/rush/types";
@@ -165,4 +166,42 @@ export function buildArena(model: Model, layout: ArenaLayout) {
 		leg.CastShadow = false;
 	}
 	CollectionService.AddTag(board, "TargetRush:Board");
+}
+
+/**
+ * Analytics zones (framework: parts tagged `TTZone`, named by a `Name` attribute; a player is in the smallest one that
+ * contains them): invisible boxes from shared/analytics/catalog.ts, in a `Zones` folder inside the arena model.
+ *
+ * They travel with the model, so the world handoff keeps them (and their tags) across hot-swaps. They are versioned on
+ * their own: an adopted arena whose zones are missing or older gets new ones without rebuilding the floor.
+ */
+export function ensureZones(model: Model, layout: ArenaLayout) {
+	const key = `zones.v${ZONE_VERSION}|${layout.key}`;
+	const existing = model.FindFirstChild("Zones");
+	if (existing && existing.GetAttribute("ZoneKey") === key) return;
+	existing?.Destroy();
+
+	const folder = new Instance("Folder");
+	folder.Name = "Zones";
+	const offset = layout.pad.sub(layout.center);
+	const boxes = zoneBoxes({ arenaRadius: layout.radius, padX: offset.X, padZ: offset.Z, padRadius: PAD_RADIUS });
+	boxes.forEach((box, index) => {
+		const zone = new Instance("Part");
+		zone.Name = `${box.name}${index + 1}`;
+		zone.Anchored = true;
+		zone.CanCollide = false;
+		zone.CanQuery = false;
+		zone.CanTouch = false;
+		zone.CastShadow = false;
+		zone.AudioCanCollide = false;
+		zone.Transparency = 1;
+		zone.Size = new Vector3(box.sx, box.sy, box.sz);
+		zone.CFrame = new CFrame(layout.center.add(new Vector3(box.x, box.y, box.z)));
+		zone.SetAttribute("Name", box.name);
+		zone.Parent = folder;
+	});
+	folder.SetAttribute("ZoneKey", key);
+	folder.Parent = model;
+	// Tagged once the parts are in the world (the engine's zone list follows the tag).
+	for (const zone of folder.GetChildren()) CollectionService.AddTag(zone, ZONE_TAG);
 }

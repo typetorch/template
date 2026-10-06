@@ -9,6 +9,7 @@ import {
 	type ProperReturns,
 } from "@typetorch/framework";
 import { $print, $warn } from "rbxts-transform-debug";
+import { EVENTS } from "../../../shared/analytics/catalog";
 import { network } from "../../../shared/net";
 import {
 	CLICK_RANGE,
@@ -20,8 +21,9 @@ import {
 	TOUCH_SLACK,
 } from "../../../shared/rush/config";
 import { PALETTE, TARGET_COLORS } from "../../../shared/rush/palette";
-import { diameterFor, gradeFor, lifetimeFor, maxTargets, scaleAt, spawnEvery } from "../../../shared/rush/rules";
+import { diameterFor, gradeFor, lifetimeFor, maxTargets, perfectAt, scaleAt, spawnEvery } from "../../../shared/rush/rules";
 import { TARGET_TAG, type HitResult, type HitVia } from "../../../shared/rush/types";
+import { AnalyticsService } from "../analytics/analytics.service";
 import { ArenaService } from "./arena.service";
 import { rootOf } from "./characters";
 import { RoundService } from "./round.service";
@@ -55,6 +57,13 @@ function now() {
 	return Workspace.GetServerTimeNow();
 }
 
+function round2(value: number) {
+	return math.round(value * 100) / 100;
+}
+
+/** Recently popped target ids remembered (to tell "someone else took it" from "it was gone anyway"). */
+const RECENT_POPS = 32;
+
 /**
  * Spawns targets during a round and validates every hit on the server: the target exists, the timing fits (with lag
  * compensation from the player's ping, capped), the player is close enough (any distance in the arena for a click,
@@ -69,6 +78,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 	private folder!: Folder;
 	private readonly targets = new Map<number, LiveTarget>();
 	private readonly random = new Random();
+	private readonly recentPops = new Array<number>();
 	private nextSpawnAt = 0;
 	/** Target ids never repeat within a server (clients key effects by id), so the counter lives in persist. */
 	private ids!: { next: number };
@@ -77,6 +87,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 	constructor(
 		private readonly arena: ArenaService,
 		private readonly round: RoundService,
+		private readonly analytics: AnalyticsService,
 	) {
 		super();
 	}
@@ -138,6 +149,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 		if (!position) return;
 		const id = this.ids.next;
 		this.ids.next += 1;
+		this.round.noteTargetSpawned();
 		this.place({
 			id,
 			x: position.X,
@@ -180,6 +192,34 @@ export class TargetService extends Module implements OnInit, OnTick {
 		target.gone = true;
 		target.part?.Destroy();
 		target.part = undefined;
+		this.round.noteTargetExpired();
+		// Nobody hit it: a miss for the nearest player, the one it was most likely meant for (server-only if nobody has a
+		// character).
+		let nearest: Player | undefined;
+		let distance = math.huge;
+		for (const player of Players.GetPlayers()) {
+			const root = rootOf(player);
+			if (!root) continue;
+			const away = root.Position.sub(target.position).Magnitude;
+			if (away < distance) {
+				distance = away;
+				nearest = player;
+			}
+		}
+		this.analytics.track(nearest, EVENTS.targetMissed, {
+			kind: this.kindOf(target),
+			distance: nearest ? math.floor(distance) : -1,
+			life_ms: math.floor(target.lifetime * 1000),
+			progress: round2(this.round.progress(now())),
+			players: Players.GetPlayers().size(),
+			alive: this.positions().size(),
+		});
+	}
+
+	/** "golden", "low" (run into it) or "high" (click it). */
+	private kindOf(target: SavedTarget): string {
+		if (target.golden) return "golden";
+		return target.y - this.arena.layout.center.Y < 4.5 ? "low" : "high";
 	}
 
 	private clear() {
@@ -188,6 +228,16 @@ export class TargetService extends Module implements OnInit, OnTick {
 	}
 
 	private hit(player: Player, targetId: number, via: HitVia): ProperReturns<HitResult> {
+		const reply = this.judge(player, targetId, via);
+		if (reply[0] === false) {
+			// Analytics: refusals per round (lag, distance, contested targets) go into round_end.
+			const contested = reply[1] === "Gone" && this.recentPops.includes(targetId);
+			this.round.noteRefused(player, contested);
+		}
+		return reply;
+	}
+
+	private judge(player: Player, targetId: number, via: HitVia): ProperReturns<HitResult> {
 		if (!this.round.isRound()) return [false, "No round"];
 		if (targetId % 1 !== 0) return [false, "Bad target"];
 		const target = this.targets.get(targetId);
@@ -214,7 +264,24 @@ export class TargetService extends Module implements OnInit, OnTick {
 
 		this.targets.delete(targetId);
 		target.part?.Destroy();
+		this.recentPops.push(targetId);
+		if (this.recentPops.size() > RECENT_POPS) this.recentPops.shift();
 		const result = this.round.scoreHit(player, targetId, gradeFor(age, target.lifetime), target.golden, at);
+		this.analytics.track(player, EVENTS.targetHit, {
+			kind: this.kindOf(target),
+			via,
+			grade: result.grade,
+			points: result.points,
+			combo: result.combo,
+			multiplier: result.multiplier,
+			distance: math.floor(distance),
+			// Lag-compensated time from the spawn to the hit, and how far off the PERFECT moment it was (- early, + late).
+			reaction_ms: math.floor(age * 1000),
+			off_ms: math.floor((age - perfectAt(target.lifetime)) * 1000),
+			life: round2(age / target.lifetime),
+			progress: round2(this.round.progress(at)),
+			ping_ms: math.floor(player.GetNetworkPing() * 1000),
+		});
 		network.server.rush.popped.fireExcept(player, {
 			targetId,
 			userId: player.UserId,

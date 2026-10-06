@@ -2,6 +2,7 @@ import { Debris, Players, SoundService } from "@rbxts/services";
 import { Controller, Module, popIn, popOut, PopupQueue, type OnInit } from "@typetorch/framework";
 import { PALETTE } from "../../../shared/rush/palette";
 import { box, column, corner, FONT_BOLD, FONT_BODY, make, pad, panel, row, stroke, text } from "../../../shared/ui/kit";
+import { tagScreen } from "../../ui/screens";
 
 /** Sounds that ship with every Roblox client (rbxasset://), so the game uploads nothing. */
 const SOUNDS = {
@@ -95,6 +96,16 @@ export class UiController extends Module implements OnInit {
 		for (const [name, id] of pairs(SOUNDS)) {
 			this.sounds.set(name, make("Sound", this.soundFolder, { Name: name, SoundId: id, Volume: 0.5 }));
 		}
+	}
+
+	/**
+	 * An invisible marker for an analytics screen that has no frame of its own (a HUD state): it is the screen `name`
+	 * while Visible (see client/ui/screens.ts). Lives in this controller's ScreenGui, so a swap removes it.
+	 */
+	screenMarker(name: string): Frame {
+		const marker = box(this.hud, `Screen_${name}`, { Size: UDim2.fromScale(0, 0), Visible: false });
+		tagScreen(marker, name);
+		return marker;
 	}
 
 	/** Plays a local sound (overlapping plays allowed). */

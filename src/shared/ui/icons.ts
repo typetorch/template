@@ -222,3 +222,23 @@ export function setRank(badge: Frame, rank: number) {
 	const label = face.FindFirstChild("Rank") as TextLabel | undefined;
 	if (label) label.Text = tostring(rank);
 }
+
+/** A shopping bag: the shop. */
+export function bagIcon(parent: Instance, size: UDim2, color: Color3 = PALETTE.lemon, strokePx = 3) {
+	const icon = iconBox(parent, "BagIcon", size);
+	const handle = box(icon, "Handle", {
+		AnchorPoint: new Vector2(0.5, 0.5),
+		Position: UDim2.fromScale(0.5, 0.3),
+		Size: UDim2.fromScale(0.42, 0.4),
+	});
+	corner(handle);
+	stroke(handle, color, strokePx);
+	const body = panel(icon, "Body", color, {
+		AnchorPoint: new Vector2(0.5, 1),
+		Position: UDim2.fromScale(0.5, 0.96),
+		Size: UDim2.fromScale(0.82, 0.62),
+	});
+	corner(body, new UDim(0.22, 0));
+	dot(icon, "Clasp", new Vector2(0.5, 0.58), 0.16, PALETTE.white).BackgroundTransparency = 0.2;
+	return icon;
+}

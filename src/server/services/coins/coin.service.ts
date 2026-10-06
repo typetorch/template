@@ -1,8 +1,10 @@
 import { CollectionService, Workspace } from "@rbxts/services";
 import { Module, Service, setNetworkLimits, type OnStart, type OnTick } from "@typetorch/framework";
 import { $print, $warn } from "rbxts-transform-debug";
+import { COIN_REASONS, EVENTS } from "../../../shared/analytics/catalog";
 import { network } from "../../../shared/net";
 import type { Phase } from "../../../shared/rush/types";
+import { AnalyticsService } from "../analytics/analytics.service";
 import { RoundService } from "../rush/round.service";
 import { WalletService } from "./wallet.service";
 
@@ -26,6 +28,7 @@ export class CoinService extends Module implements OnStart, OnTick {
 	constructor(
 		private readonly wallet: WalletService,
 		private readonly round: RoundService,
+		private readonly analytics: AnalyticsService,
 	) {
 		super();
 	}
@@ -100,6 +103,8 @@ export class CoinService extends Module implements OnStart, OnTick {
 		}
 		coin.Parent = undefined;
 		this.respawnAt.set(coinId, os.clock() + RESPAWN_SECONDS);
-		this.wallet.add(player, 1);
+		const balance = this.wallet.add(player, 1, COIN_REASONS.lobbyCoin);
+		// `taken`: coins of the ring still waiting to respawn (how picked-over the ring is).
+		this.analytics.track(player, EVENTS.coinPickup, { coin: coinId, balance, taken: this.respawnAt.size(), phase: this.round.phase() });
 	}
 }

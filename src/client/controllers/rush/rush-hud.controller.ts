@@ -1,6 +1,7 @@
 import { listen } from "@rbxts/charm";
 import { Workspace } from "@rbxts/services";
 import { bump, Controller, Module, popIn, popOut, type OnRender, type OnStart } from "@typetorch/framework";
+import { HUD_SCREENS } from "../../../shared/analytics/catalog";
 import { COMBO_WINDOW } from "../../../shared/rush/config";
 import { PALETTE } from "../../../shared/rush/palette";
 import { formatNumber } from "../../../shared/rush/rules";
@@ -63,6 +64,19 @@ export class RushHudController extends Module implements OnStart, OnRender {
 		this.trove.add(listen(() => this.state.phase(), (info, previous) => this.onPhase(info, previous)));
 		this.trove.add(listen(() => this.state.me(), (me, previous) => this.showMe(me, previous)));
 		this.trove.add(listen(() => this.state.ready(), (ready) => (this.timer.Visible = ready)));
+
+		// Analytics screens: one HUD screen per phase (LobbyHud, CountdownHud, RoundHud, ResultsHud), from the first
+		// real phase on (not the placeholder before the snapshot). Cards (Results, Shop) open above them.
+		const markers = new Map<Phase, Frame>();
+		for (const [phase, name] of pairs(HUD_SCREENS)) markers.set(phase, this.ui.screenMarker(name));
+		this.trove.add(
+			listen(
+				() => (this.state.ready() ? this.state.phase().phase : undefined),
+				(phase) => {
+					for (const [markerPhase, marker] of markers) marker.Visible = markerPhase === phase;
+				},
+			),
+		);
 	}
 
 	onRender() {

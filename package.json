@@ -10,6 +10,7 @@
 		"payload": "bun run build && node -e \"require('fs').mkdirSync('build',{recursive:true})\" && rojo build default.project.json -o build/payload.rbxm",
 		"watch": "bun scripts/build-info.ts && rbxtsc -w",
 		"studio": "rojo serve studio.project.json",
+		"test:analytics": "lune run scripts/test-analytics.luau",
 		"typetorch": "typetorch",
 		"packages": "bun scripts/packages.ts",
 		"postinstall": "bun scripts/packages.ts --sync"

@@ -20,6 +20,9 @@ import {
 	text,
 	textStroke,
 } from "../../../shared/ui/kit";
+import { EVENTS, SCREENS } from "../../../shared/analytics/catalog";
+import { tagScreen } from "../../ui/screens";
+import { AnalyticsController } from "../analytics/analytics.controller";
 import { UiController } from "../ui/ui.controller";
 import { RushStateController, type ResultsState } from "./rush-state.controller";
 
@@ -41,6 +44,7 @@ export class ResultsController extends Module implements OnStart {
 	constructor(
 		private readonly ui: UiController,
 		private readonly state: RushStateController,
+		private readonly analytics: AnalyticsController,
 	) {
 		super();
 	}
@@ -66,6 +70,8 @@ export class ResultsController extends Module implements OnStart {
 		// Everything this card owns lives in its own trove, removed when the card closes.
 		const popup = this.trove.extend();
 		const dim = popup.add(panel(this.ui.modal, "Dim", PALETTE.ink, { Size: UDim2.fromScale(1, 1), BackgroundTransparency: 1 }));
+		tagScreen(dim, SCREENS.results);
+		const openedAt = os.clock();
 		TweenService.Create(dim, new TweenInfo(0.2), { BackgroundTransparency: 0.55 }).Play();
 
 		// The card holds the body (a vertical list) and the X button (outside the list, on the corner).
@@ -199,10 +205,18 @@ export class ResultsController extends Module implements OnStart {
 		crossIcon(close, UDim2.fromScale(0.6, 0.6), PALETTE.white).Position = UDim2.fromScale(0.2, 0.2);
 
 		let finished = false;
-		const finish = () => {
+		/** `how`: the X, the auto-close timer, or the lobby starting (analytics: do players read the card?). */
+		const finish = (how: "button" | "timer" | "phase") => {
 			if (finished) return;
 			finished = true;
 			this.memo.shownRound = results.round;
+			this.analytics.track(EVENTS.resultsClosed, {
+				how,
+				secs: math.floor((os.clock() - openedAt) * 10) / 10,
+				round: results.round,
+				rank: mine.rank,
+				new_best: mine.newBest,
+			});
 			close.Active = false;
 			TweenService.Create(dim, new TweenInfo(0.15), { BackgroundTransparency: 1 }).Play();
 			popOut(card, () => {
@@ -210,13 +224,13 @@ export class ResultsController extends Module implements OnStart {
 				done();
 			});
 		};
-		popup.connect(close.Activated, finish);
-		popup.add(task.delay(seconds, finish));
+		popup.connect(close.Activated, () => finish("button"));
+		popup.add(task.delay(seconds, () => finish("timer")));
 		popup.add(
 			listen(
 				() => this.state.phase().phase,
 				(phase) => {
-					if (phase !== "results") finish();
+					if (phase !== "results") finish("phase");
 				},
 			),
 		);

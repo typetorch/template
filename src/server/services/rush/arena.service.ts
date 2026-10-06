@@ -1,12 +1,13 @@
 import { Module, Service, type OnInit } from "@typetorch/framework";
 import { $print } from "rbxts-transform-debug";
 import { PAD_RADIUS } from "../../../shared/rush/config";
-import { buildArena, computeLayout, type ArenaLayout } from "./arena-builder";
+import { buildArena, computeLayout, ensureZones, type ArenaLayout } from "./arena-builder";
 import { handoffModel } from "./handoff";
 
 /**
  * The Target Rush arena, built entirely from code around the place's SpawnLocation. The static geometry is handed over
- * between generations (see handoff.ts), so a mid-round deploy never pulls the floor from under anyone.
+ * between generations (see handoff.ts), so a mid-round deploy never pulls the floor from under anyone. It carries the
+ * analytics zones too (TTZone parts, see ensureZones).
  */
 @Service({ loadOrder: -10 })
 export class ArenaService extends Module implements OnInit {
@@ -19,6 +20,8 @@ export class ArenaService extends Module implements OnInit {
 		const { model, adopted } = handoffModel(this.trove, "TargetRushArena", this.layout.key, (built) =>
 			buildArena(built, this.layout),
 		);
+		// Analytics zones (Lobby, StartPad, Arena, Board, Outskirts): part of the handed-over model, added if missing.
+		ensureZones(model, this.layout);
 		this.pad = model.FindFirstChild("Pad") as BasePart;
 		this.board = model.FindFirstChild("Board") as BasePart;
 		$print(adopted ? "arena handed over from the previous generation" : `arena built (${this.layout.key})`);

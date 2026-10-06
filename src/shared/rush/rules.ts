@@ -10,17 +10,22 @@ export function lerp(from: number, to: number, alpha: number) {
 	return from + (to - from) * alpha;
 }
 
+/** A round's length (`short`: the round_length experiment's short rounds). Read from the knobs every time. */
+export function roundSeconds(short = false): number {
+	return short ? Knobs.ROUND_SECONDS_SHORT : Knobs.ROUND_SECONDS;
+}
+
 /** How long a phase lasts. Read from the knobs every time, so a deploy can stretch the running phase. */
-export function phaseSeconds(phase: Phase): number {
+export function phaseSeconds(phase: Phase, short = false): number {
 	if (phase === "lobby") return Knobs.LOBBY_SECONDS;
 	if (phase === "countdown") return Knobs.COUNTDOWN_SECONDS;
-	if (phase === "round") return Knobs.ROUND_SECONDS;
+	if (phase === "round") return roundSeconds(short);
 	return Knobs.RESULTS_SECONDS;
 }
 
-/** 0 at the start of a round, 1 at its end: drives the difficulty ramp. */
-export function roundProgress(now: number, startedAt: number): number {
-	return math.clamp((now - startedAt) / math.max(Knobs.ROUND_SECONDS, 1), 0, 1);
+/** 0 at the start of a round, 1 at its end: drives the difficulty ramp (a short round ramps faster). */
+export function roundProgress(now: number, startedAt: number, short = false): number {
+	return math.clamp((now - startedAt) / math.max(roundSeconds(short), 1), 0, 1);
 }
 
 export function spawnEvery(progress: number, players: number): number {

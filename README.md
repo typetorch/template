@@ -10,19 +10,27 @@ elements with per-element troves, charm atoms for UI state, a code-built HUD and
 One folder per feature on each side; the boot files require every ModuleScript under `services/` / `controllers/`.
 ```
 src/server/boot.ts                         boot(kernel) -> startServer(...)   (called by the kernel's Entry script)
+src/server/services/analytics/             AnalyticsService (the engine, funnels, experiments), JourneyService (activities)
 src/server/services/coins/                 WalletService (coins, persist), CoinService (lobby coin ring)
 src/server/services/rush/                  Target Rush: Arena, Round, Target, Board, Best services
                                            + arena-builder.ts, handoff.ts, characters.ts (plain helpers)
+src/server/services/shop/                  ShopService (trails for coins, the optional Robux coin pack)
 src/client/boot.ts                         boot(kernel) -> startClient(...)
+src/client/controllers/analytics/          AnalyticsController (client engine, experiment variants)
 src/client/controllers/ui/                 UiController: ScreenGui, responsive scale, PopupQueue, toasts, sounds
 src/client/controllers/coins/              CoinController (coin prompts), WalletHudController (coin counter)
-src/client/controllers/rush/               RushState (charm atoms), Target, RushHud, BoardHud, Results, Pad
+src/client/controllers/rush/               RushState (charm atoms), Target, RushHud, BoardHud, Results, Pad, Guide
+src/client/controllers/shop/               ShopController (bag button, shop card)
 src/client/controllers/system/             UpdateToastController, DevOverlayController
 src/client/ui/fx.ts                        particle bursts and floating text
+src/client/ui/screens.ts                   tagScreen(): analytics screens (TTScreen)
+src/shared/analytics/catalog.ts            every analytics name: funnels, experiments, activities, screens, zones, events
 src/shared/net.ts                          createNetwork<ClientToServer, ServerToClient>()
 src/shared/rush/config.ts                  Target Rush balance knobs (the live-demo file)
 src/shared/rush/{types,rules,palette}.ts   shared shapes, pure rules, colors
+src/shared/shop/catalog.ts                 trails, prices, the coin pack's product id (placeholder 0)
 src/shared/ui/{kit,icons}.ts               code-built UI kit; icons drawn from Frames (no images, no emojis)
+scripts/test-analytics.luau                Lune check of the analytics catalog (bun run test:analytics)
 src/shared/build.ts                        GENERATED before every compile (git identity), gitignored
 default.project.json                       the payload: a Rojo Model with Server/, Shared/, Client/, include/
 studio.project.json                        Studio testing: the kernel + this payload as ServerStorage.TypeTorchDev.Payload
@@ -36,7 +44,8 @@ low ones. Each target has an approach ring that closes on it: pop it as the ring
 to it for GREAT (20), otherwise GOOD (10). Hits within 3 s of each other build a combo (x2 at 5, x3 at 12, x4 at 25);
 clicking empty air ends it. Targets shrink and spawn faster as the round goes on; rare golden targets are worth 5x
 and pay coins on the spot. Results show your rank, score, best combo, perfects, hits and coins; scores go on the
-session board in the world and in the HUD. Solo works; friends share the targets (first hit wins).
+session board in the world and in the HUD. Solo works; friends share the targets (first hit wins). Between rounds the
+bag button (under the coin counter) opens the shop: character trails for coins.
 
 **What each part shows.**
 | Part | TypeTorch feature |
@@ -51,6 +60,8 @@ session board in the world and in the HUD. Solo works; friends share the targets
 | `ResultsController` | The single `PopupQueue`; client `persist` remembers which results were closed, so a client swap mid-card shows it again only if it wasn't closed |
 | `UpdateToastController` | `onUpdatePending`: "Updating ~3s" toast; after the swap `startInfo` (kind, reason) gives "Updated #seq <id> 1.8s" |
 | `DevOverlayController` | `isDev` + `onPlayerDevChanged`: `gen | branch (channel) | artifact | how it started` in the bottom-left corner, devs only |
+| `AnalyticsService`, `JourneyService`, `AnalyticsController` | `AnalyticsEngine` on both sides (see "Analytics"): per-session funnel memos and the player journey in `persist`, so a swap never logs a step twice; experiments assigned per player and handed to the client as attributes |
+| `ShopService`, `ShopController` | A coin sink and an optional Robux product: `MarketplaceService.ProcessReceipt` owned by the generation (set in `onInit`, cleared by the trove), granted receipts kept in `persist`; trails rebuilt per character in a per-player trove; the shop card goes through the `PopupQueue` with a script-free grid |
 
 **Live demo.** Start a round, then change a knob in `src/shared/rush/config.ts`, deploy to dev and keep playing:
 - `TARGET_SIZE = 9` (or `2.5`): every target changes size the moment the new server generation runs;
@@ -60,6 +71,74 @@ session board in the world and in the HUD. Solo works; friends share the targets
 
 Players see "Updating ~Ns", then "Updated <id>"; nobody is kicked or reset, the score, combo, timer and targets carry
 on, and the board counts "Updated live xN". Arena knobs (`ARENA_RADIUS`, `PAD_*`) rebuild the arena instead.
+
+## Analytics
+The game creates the framework's `AnalyticsEngine` on the server (`AnalyticsService`) and the client
+(`AnalyticsController`), and feeds every query of `@typetorch/analytics` (overview, roblox, retention, funnel, timeline,
+player-graph, flow, experiment, confusion, top-events). The engine logs joins, leaves, devices, tech health, zones,
+screens and new players' first sessions by itself; the game adds what only it knows. Every name lives in
+`src/shared/analytics/catalog.ts`: funnel steps keep their index forever (new steps go at the end), an experiment's
+first variant is its control, and `bun run build && bun run test:analytics` checks both, plus the zones.
+Sending needs the ConfigService key `TypeTorchAnalytics` (framework README); without it the engine keeps only the newest
+rows.
+
+**State: the node graph.** Every row carries `zone:<Z>|screen:<S>|activity:<A>`.
+| Part | Values | Set by |
+|---|---|---|
+| Activity (per player) | `lobby` -> `queued` (standing on the start pad) -> `countdown` -> `round` -> `results` -> `lobby`; `waiting` = joined during the results (no card) | `JourneyService` from the round's phases and the pad; server-only rows carry the phase |
+| Screen | `LobbyHud`, `CountdownHud`, `RoundHud`, `ResultsHud` (one per phase), `Results` (the round card), `Shop` (the shop card) | the client: `TTScreen`-tagged frames (`client/ui/screens.ts`); the newest open one counts |
+| Zone | `Lobby` (the middle: spawn, coin ring, r 26), `StartPad`, `Arena` (the floor out to the rim), `Board` (in front of the leaderboard), `Outskirts` (beyond the rim) | invisible `TTZone` boxes in the arena model (`ensureZones` in `arena-builder.ts`): they travel with the world handoff, and an adopted arena without them (or with older ones, `ZONE_VERSION`) gets new ones without a rebuild. A player is in the smallest box around them; round zones are many boxes |
+
+**Funnels** (`step(funnel, index, label)`).
+| Funnel | Steps | Notes |
+|---|---|---|
+| `onboarding` | 1 `spawned` (first character), 2 `moved` (6 studs from where they spawned), 3 `reached_pad` (on the start pad in the lobby), 4 `round_joined`, 5 `first_hit`, 6 `round_finished`, 7 `second_round` | once per session; read it with the `players: "new"` filter |
+| `round` | 1 `lobby` (waited in the lobby, or joined in the countdown), 2 `countdown`, 3 `started`, 4 `first_hit`, 5 `finished` | per round; a player who joins mid-round skips that round's funnel (`round_joined_late`) |
+| `shop` | 1 `opened`, 2 `item_viewed` (client), 3 `bought`, 4 `equipped` | once per session |
+
+**Events** (`track`, kind `custom`; server unless marked client).
+| Event | When | Props |
+|---|---|---|
+| `target_hit` | every hit | `kind` (`high`, `low`, `golden`), `via` (`click`, `touch`), `grade`, `points`, `combo`, `multiplier`, `distance` (studs), `reaction_ms` (spawn to hit, lag-compensated), `off_ms` (from the PERFECT moment, - early), `life` (0..1 of its lifetime), `progress` (0..1 of the round), `ping_ms` |
+| `target_missed` | a target vanished unhit; for the nearest player (server-only if nobody has a character) | `kind`, `distance` (-1 = nobody), `life_ms`, `progress`, `players`, `alive` |
+| `combo_milestone` | the multiplier steps up (x2 at 5, x3 at 12, x4 at 25) | `combo`, `multiplier`, `progress` |
+| `combo_lost` | a combo of 5+ ends | `combo`, `why` (`whiff`, `timeout`) |
+| `pad_start` | standing on the pad when it starts the countdown | `held` (s), `players` |
+| `round_joined_late` | joined mid-round | `round`, `secs_left`, `players` |
+| `round_end` | per player, at the end of a round | `round`, `score`, `placement`, `players`, `duration`, `played`, `length` (`normal`, `short`), `late`, `hits`, `perfects`, `greats`, `goods`, `golds`, `best_combo`, `whiffs`, `refused`, `contested` (taken first by someone else), `targets`, `expired`, `coins`, `personal_best`, `new_best`, `swaps`, `session_rounds` |
+| `personal_best` | a round beat the player's best | `score`, `previous`, `gain`, `first`, `session_rounds` |
+| `round_queued`, `round_started`, `round_summary` | server-only, one each per round | `round`, `by` (`pad`, `timer`), `lobby_secs`, `players`, `length`; `secs`; `duration`, `top`, `targets`, `expired`, `left`, `swaps` |
+| `coin_pickup` | a lobby coin | `coin`, `balance`, `taken` (ring coins waiting to respawn), `phase` |
+| `shop_opened` | the shop card asked for its state | `coins`, `owned`, `equipped`, `phase`, `pack` |
+| `item_viewed` (client) | an item tapped | `item`, `price`, `currency` (`coins`, `robux`), `owned`, `equipped`, `affordable` |
+| `item_bought`, `item_equipped`, `buy_failed` | the shop's answers | `item`, `price`, `coins_after`, `owned`, `session_rounds`; `item`, `from`; `item`, `reason` (`coins`, `owned`, `unknown`), `price`, `coins` |
+| `purchase_prompt_shown`, `_accepted`, `_cancelled` | the Robux coin pack's prompt | `product`, `item`, `robux`, `where`; `secs` (prompt open) |
+| `shop_closed`, `results_closed` (client) | a card closed | `how`, `secs`; `viewed`, `bought`; `round`, `rank`, `new_best` |
+| `guide_shown` (client) | the onboarding arrow first showed | `distance` |
+| `client_ready` (client) | every client generation | `generation` |
+
+**Economy** (`currency("coins", delta, reason)`): in `lobby_coin` (+1), `golden_target` (+3), `round_reward` (+score/100),
+`coin_pack` (+150, Robux); out `shop_trail` (-30 to -250). **Purchases**: `purchase({product, robux, where: "shop"})`
+once a coin pack receipt is granted.
+
+**The coin pack is a placeholder.** `COIN_PACK_PRODUCT_ID` in `src/shared/shop/catalog.ts` is `0`: the pack is hidden,
+`ProcessReceipt` is never set, no prompt is shown and nothing can be charged; the shop sells trails for coins only.
+To sell it, create a developer product in Creator Hub (Monetization > Developer Products), put its id there and deploy.
+Studio test purchases are free. Coins and trails last for the server session in this demo: a real game saves them
+before it sells coins for Robux.
+
+**Experiments** (per player, `experiment(player, name, variants)`: the server assigns them on join, stamps them on the
+player's rows and sets the attribute `Exp_<name>` for the client; splits, `active: false` and forced variants come from
+the `TypeTorchAnalytics` key, live).
+| Experiment | Variants (control first) | What changes | Watch |
+|---|---|---|---|
+| `onboarding_hint` | `none`, `arrow` | `arrow`: glowing chevrons march on the floor from the player to the start pad in the lobby, until they step on it once that session (`GuideController`). Both keep the pad's START sign and the HUD pill | onboarding steps 3-7 with `players: "new"`, D1 |
+| `round_length` | `normal`, `short` | `short`: 45 s rounds (`ROUND_SECONDS_SHORT`) with the same difficulty ramp, compressed. A round is short only when everyone in it has `short` (solo play always matches the variant; mixed servers play normal), so compare `round_end` rows by their `length` too | sessions, playtime, `session_rounds`, D1/D7 |
+| `aim_assist` | `normal`, `generous` | `generous`: the click/tap/gamepad tolerance around targets is 1.6x (`AIM_ASSIST_GENEROUS`), client-side picking only (the server checks are the same) | `target_hit` per round, `whiffs`, by device; retention |
+
+**Per-server experiments** (`sexp`, a kernel A/B pin of another artifact on a share of servers) need nothing from the
+game: every row carries `sexp`, and the comparison uses sessions and purchase rows. Any knob in `config.ts` can be
+tested that way, e.g. a build with `ROUND_SECONDS = 75` pinned on 10% of the servers.
 
 ## Build
 ```sh

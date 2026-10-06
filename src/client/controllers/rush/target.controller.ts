@@ -2,13 +2,14 @@ import { Debris, Players, UserInputService, Workspace } from "@rbxts/services";
 import { Trove } from "@rbxts/trove";
 import { Controller, Module, observeElement, type OnRender, type OnStart } from "@typetorch/framework";
 import { network } from "../../../shared/net";
-import { MIN_REACTION, PERFECT_WINDOW } from "../../../shared/rush/config";
+import { AIM_ASSIST_GENEROUS, MIN_REACTION, PERFECT_WINDOW } from "../../../shared/rush/config";
 import { GRADE_COLORS, GRADE_WORDS, PALETTE } from "../../../shared/rush/palette";
 import { lerp, perfectAt, scaleAt } from "../../../shared/rush/rules";
 import { TARGET_TAG, type HitVia } from "../../../shared/rush/types";
 import { chevronIcon, crossIcon } from "../../../shared/ui/icons";
 import { box, corner, make, stroke } from "../../../shared/ui/kit";
 import { burst, floatText } from "../../ui/fx";
+import { AnalyticsController } from "../analytics/analytics.controller";
 import { UiController } from "../ui/ui.controller";
 import { RushStateController } from "./rush-state.controller";
 
@@ -58,15 +59,22 @@ export class TargetController extends Module implements OnStart, OnRender {
 	private readonly arrows = new Array<Frame>();
 	private fx!: Folder;
 	private lastHitClock = 0;
+	private lastWhiffSent = 0;
+	/** Experiment aim_assist: the tolerance around targets ("generous" widens it). */
+	private slackScale = 1;
 
 	constructor(
 		private readonly ui: UiController,
 		private readonly state: RushStateController,
+		private readonly analytics: AnalyticsController,
 	) {
 		super();
 	}
 
 	onStart() {
+		this.analytics.observeVariant(this.trove, "aim_assist", (variant) => {
+			this.slackScale = variant === "generous" ? AIM_ASSIST_GENEROUS : 1;
+		});
 		this.fx = this.trove.add(make("Folder", Workspace, { Name: "TargetRushFx" }));
 		for (let index = 0; index < MAX_ARROWS; index++) this.arrows.push(this.makeArrow());
 
@@ -75,13 +83,13 @@ export class TargetController extends Module implements OnStart, OnRender {
 		this.trove.connect(UserInputService.InputBegan, (input, processed) => {
 			if (processed) return;
 			if (input.UserInputType === Enum.UserInputType.MouseButton1) {
-				this.aim(new Vector2(input.Position.X, input.Position.Y), SLACK_MOUSE);
+				this.aim(new Vector2(input.Position.X, input.Position.Y), SLACK_MOUSE * this.slackScale);
 			} else if (input.KeyCode === Enum.KeyCode.ButtonR2) {
-				this.aim(this.ui.overlay.AbsoluteSize.div(2), SLACK_GAMEPAD);
+				this.aim(this.ui.overlay.AbsoluteSize.div(2), SLACK_GAMEPAD * this.slackScale);
 			}
 		});
 		this.trove.connect(UserInputService.TouchTapInWorld, (position, processedByUI) => {
-			if (!processedByUI) this.aim(position, SLACK_TOUCH);
+			if (!processedByUI) this.aim(position, SLACK_TOUCH * this.slackScale);
 		});
 
 		// Someone else's pop: the same burst, smaller text.
@@ -271,9 +279,15 @@ export class TargetController extends Module implements OnStart, OnRender {
 		});
 		crossIcon(mark, UDim2.fromScale(1, 1), PALETTE.grey);
 		Debris.AddItem(mark, 0.35);
-		if (this.state.me().combo > 0) {
-			this.state.breakCombo();
+		const combo = this.state.me().combo > 0;
+		// Every whiff goes to the server (it ends the combo there, and round_end counts them), at most 4 a second
+		// (the rush.whiff rate limit).
+		if (combo || os.clock() - this.lastWhiffSent >= 0.25) {
+			this.lastWhiffSent = os.clock();
 			network.client.rush.whiff.fire();
+		}
+		if (combo) {
+			this.state.breakCombo();
 			this.ui.sound("thud", 1, 0.4);
 		}
 	}
