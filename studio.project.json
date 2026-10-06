@@ -49,6 +49,10 @@
 				"Transport": { "$path": "node_modules/@typetorch/kernel/src/server/Transport.luau" },
 				"Signing": { "$path": "node_modules/@typetorch/kernel/src/server/Signing.luau" },
 				"Fleet": { "$path": "node_modules/@typetorch/kernel/src/server/Fleet.luau" },
+				"Fallback": { "$path": "node_modules/@typetorch/kernel/src/server/Fallback.luau" },
+				"Health": { "$path": "node_modules/@typetorch/kernel/src/server/Health.luau" },
+				"Messaging": { "$path": "node_modules/@typetorch/kernel/src/server/Messaging.luau" },
+				"Settings": { "$path": "node_modules/@typetorch/kernel/src/server/Settings.luau" },
 				"vendor": { "$path": "node_modules/@typetorch/kernel/src/server/vendor" },
 				"Entry": { "$path": "node_modules/@typetorch/kernel/src/server/Entry.server.luau", "$properties": { "Disabled": true } }
 			}
