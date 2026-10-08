@@ -79,8 +79,8 @@ player-graph, flow, experiment, confusion, top-events). The engine logs joins, l
 screens and new players' first sessions by itself; the game adds what only it knows. Every name lives in
 `src/shared/analytics/catalog.ts`: funnel steps keep their index forever (new steps go at the end), an experiment's
 first variant is its control, and `bun run build && bun run test:analytics` checks both, plus the zones.
-Sending needs the ConfigService key `TypeTorchAnalytics` (framework README); without it the engine keeps only the newest
-rows.
+Sending needs a backend in the signed settings record (`bun run typetorch backend setup --url <backend>`, see Config);
+without it the engine keeps only the newest rows.
 
 **State: the node graph.** Every row carries `zone:<Z>|screen:<S>|activity:<A>`.
 | Part | Values | Set by |
@@ -129,7 +129,7 @@ before it sells coins for Robux.
 
 **Experiments** (per player, `experiment(player, name, variants)`: the server assigns them on join, stamps them on the
 player's rows and sets the attribute `Exp_<name>` for the client; splits, `active: false` and forced variants come from
-the `TypeTorchAnalytics` key, live).
+the settings record's analytics section, live).
 | Experiment | Variants (control first) | What changes | Watch |
 |---|---|---|---|
 | `onboarding_hint` | `none`, `arrow` | `arrow`: glowing chevrons march on the floor from the player to the start pad in the lobby, until they step on it once that session (`GuideController`). Both keep the pad's START sign and the HUD pill | onboarding steps 3-7 with `players: "new"`, D1 |
@@ -139,6 +139,17 @@ the `TypeTorchAnalytics` key, live).
 **Per-server experiments** (`sexp`, a kernel A/B pin of another artifact on a share of servers) need nothing from the
 game: every row carries `sexp`, and the comparison uses sessions and purchase rows. Any knob in `config.ts` can be
 tested that way, e.g. a build with `ROUND_SECONDS = 75` pinned on 10% of the servers.
+
+## Config
+Secrets live in this repo's `.env` (gitignored), everything else in `typetorch.json`:
+```sh
+# .env
+OPENCLOUD_API_KEY=<Roblox Open Cloud key>      # or OPENCLOUD_ASSETS_KEY / OPENCLOUD_DEPLOY_KEY / OPENCLOUD_PLACE_KEY
+TYPETORCH_API_KEY=<the backend's API key>      # game servers write with it
+TYPETORCH_ADMIN_TOKEN=<the backend's admin token>
+```
+`bun run typetorch backend setup --url https://<backend>` points the game at the TypeTorch backend (it writes
+`typetorch.json` `backend.url`); `bun run typetorch doctor` lists every value and where it came from.
 
 ## Build
 ```sh
