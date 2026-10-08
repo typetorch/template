@@ -6,7 +6,8 @@ import { UiController } from "../ui/ui.controller";
 
 /**
  * Devs only (`TypeTorch.isDev`, cosmetic on the client: the server re-checks everything): a one-line overlay in the
- * bottom-left corner with the running generation, branch and channel, artifact, and how this generation started. It
+ * bottom-left corner with the running generation, branch and its channel (TypeTorch.branchChannel: what the branch is,
+ * not the rules), artifact, and how this generation started. It
  * follows dev status changes live (`TypeTorch.onPlayerDevChanged`).
  */
 @Controller()
@@ -20,7 +21,7 @@ export class DevOverlayController extends Module implements OnStart {
 		const artifact = TypeTorch.artifact;
 		const parts = [
 			`gen ${TypeTorch.generation}`,
-			`${TypeTorch.branch} (${TypeTorch.channel})`,
+			`${TypeTorch.branch} (${TypeTorch.branchChannel})`,
 			artifact.seq !== undefined ? `#${artifact.seq} ${artifact.id}` : artifact.id,
 			start.kind === "swap" ? `${start.reason}${start.previous ? ` from ${start.previous.artifact.id}` : ""}` : start.kind,
 		];
