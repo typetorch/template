@@ -2,15 +2,28 @@
 	"project": "template",
 	"universeId": 10769310634,
 	"placeId": 102504202680447,
-	"creator": { "groupId": 8015542 },
+	"creator": {
+		"groupId": 8015542
+	},
 	"defaultBranch": "prod",
-	"branches": { "main": "prod" },
-	"channels": { "prod": "prod" },
-	"members": { "409950512": "owner" },
+	"branches": {
+		"main": "prod",
+		"dev":"dev"
+	},
+	"channels": {
+		"prod": "prod",
+		"dev":"dev"
+	},
+	"members": {
+		"409950512": "owner"
+	},
 	"devBadgeId": null,
 	"approval": "prod",
 	"kernel": "node_modules/@typetorch/kernel",
-	"signingPublicKeys": ["9xUpw/8GdJHzOBm+kbtuNnVvQMkx/cJFh5xbk29J9C4="],
+	"signingPublicKeys": [
+		"9xUpw/8GdJHzOBm+kbtuNnVvQMkx/cJFh5xbk29J9C4="
+	],
 	"keyAssetId": 97132316474995,
-	"fallbackPublicKey": "6B0QUc8EORQjtKLj3bhYIHfhMB3wLIqV9H9u9b9+EOA="
+	"fallbackPublicKey": "6B0QUc8EORQjtKLj3bhYIHfhMB3wLIqV9H9u9b9+EOA=",
+	"backend": {"url":"https://typetorch.phasenull.dev"}
 }
