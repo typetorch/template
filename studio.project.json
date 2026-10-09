@@ -53,6 +53,8 @@
 				"Health": { "$path": "node_modules/@typetorch/kernel/src/server/Health.luau" },
 				"Messaging": { "$path": "node_modules/@typetorch/kernel/src/server/Messaging.luau" },
 				"Settings": { "$path": "node_modules/@typetorch/kernel/src/server/Settings.luau" },
+				"Budget": { "$path": "node_modules/@typetorch/kernel/src/server/Budget.luau" },
+				"Errors": { "$path": "node_modules/@typetorch/kernel/src/server/Errors.luau" },
 				"vendor": { "$path": "node_modules/@typetorch/kernel/src/server/vendor" },
 				"Entry": { "$path": "node_modules/@typetorch/kernel/src/server/Entry.server.luau", "$properties": { "Disabled": true } }
 			}
