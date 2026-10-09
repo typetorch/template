@@ -78,6 +78,8 @@ interface RoundStore {
 	/** Targets spawned and targets nobody hit, this round (analytics). */
 	targets?: number;
 	expired?: number;
+	/** Misses a player was within reach of (one target_missed row each). */
+	missedNear?: number;
 }
 
 function now() {
@@ -226,8 +228,10 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 		this.store.targets = (this.store.targets ?? 0) + 1;
 	}
 
-	noteTargetExpired() {
+	/** A target nobody hit vanished; `near`: a player was close enough for a target_missed row. */
+	noteTargetExpired(near: boolean) {
 		this.store.expired = (this.store.expired ?? 0) + 1;
+		if (near) this.store.missedNear = (this.store.missedNear ?? 0) + 1;
 	}
 
 	/** A hit the server refused (`contested`: someone else took the target first). */
@@ -400,6 +404,7 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 			store.mine.clear();
 			store.targets = 0;
 			store.expired = 0;
+			store.missedNear = 0;
 			const players = Players.GetPlayers();
 			// Experiment round_length: short only when everyone here has the short variant (a player whose variant isn't
 			// known yet counts as the control), so a mixed server plays normal rounds.
@@ -520,6 +525,7 @@ export class RoundService extends Module implements OnInit, OnStart, OnTick {
 			top: rows[0]?.score ?? 0,
 			targets: store.targets ?? 0,
 			expired: store.expired ?? 0,
+			missed_near: store.missedNear ?? 0,
 			swaps: store.swaps,
 		});
 		this.board.recordRound(rows);

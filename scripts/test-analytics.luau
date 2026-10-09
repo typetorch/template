@@ -57,7 +57,7 @@ end
 
 -- Funnels: the labels and their order are the data's step indexes. Add at the end; never change these. ------------
 local GOLDEN_FUNNELS = {
-	onboarding = { "spawned", "moved", "reached_pad", "round_joined", "first_hit", "round_finished", "second_round" },
+	onboarding = { "spawned", "moved", "reached_pad", "round_joined", "first_hit", "round_finished", "second_round", "first_click" },
 	round = { "lobby", "countdown", "started", "first_hit", "finished" },
 	shop = { "opened", "item_viewed", "bought", "equipped" },
 }

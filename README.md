@@ -51,7 +51,7 @@ bag button (under the coin counter) opens the shop: character trails for coins.
 | Part | TypeTorch feature |
 |---|---|
 | `RoundService` | Server-authoritative round in `persist("rush.round.v1")` (phase, start time, scores, combos): a deploy mid-round carries on with the same round. `onSwapOut` counts the swaps the round survived; `onBranchChanged` resets to the lobby; `observePlayers` for joins; `startInfo` logs "round N carries on" |
-| `TargetService` | Hit validation: target exists, timing with capped lag compensation, distance (click range / touching distance), per-player cooldown; `setNetworkLimits` rate/shape limits plus the generated type guards on `rush.hit` / `rush.whiff`. Target parts live in the trove; `onSwapOut` saves them as plain data and the next generation restores them with the same ids and timers |
+| `TargetService` | Hit validation: target exists, timing with capped lag compensation, distance (click range; touching distance, low targets only), per-player cooldown; `setNetworkLimits` rate/shape limits plus the generated type guards on `rush.hit` / `rush.whiff`. Target parts live in the trove; `onSwapOut` saves them as plain data and the next generation restores them with the same ids and timers |
 | `ArenaService` + `handoff.ts` | All world content is code. The static arena is handed over between same-branch generations (adopted by layout key), so the floor never blinks out mid-swap; changing an arena knob rebuilds it |
 | `BoardService` | SurfaceGui session board (live round + session bests, `persist`), "Updating..." on `onUpdatePending` (server side), "Updated live xN" and the running `gen | artifact` |
 | `BestService` | Personal bests in a DataStore split by channel, one key per player, read once per join, written only on a new best (UpdateAsync max, budget-checked, pcall). Unfinished writes are retried by the next generation from `persist`. Falls back to in-session only when the DataStore is unavailable (Studio without API access), or set `SAVE_PERSONAL_BEST = false` |
@@ -92,22 +92,22 @@ without it the engine keeps only the newest rows.
 **Funnels** (`step(funnel, index, label)`).
 | Funnel | Steps | Notes |
 |---|---|---|
-| `onboarding` | 1 `spawned` (first character), 2 `moved` (6 studs from where they spawned), 3 `reached_pad` (on the start pad in the lobby), 4 `round_joined`, 5 `first_hit`, 6 `round_finished`, 7 `second_round` | once per session; read it with the `players: "new"` filter |
+| `onboarding` | 1 `spawned` (first character), 2 `moved` (6 studs from where they spawned), 3 `reached_pad` (on the start pad in the lobby), 4 `round_joined`, 5 `first_hit`, 6 `round_finished`, 7 `second_round`, 8 `first_click` (a click hit; running into a target doesn't count) | once per session; read it with the `players: "new"` filter |
 | `round` | 1 `lobby` (waited in the lobby, or joined in the countdown), 2 `countdown`, 3 `started`, 4 `first_hit`, 5 `finished` | per round; a player who joins mid-round skips that round's funnel (`round_joined_late`) |
 | `shop` | 1 `opened`, 2 `item_viewed` (client), 3 `bought`, 4 `equipped` | once per session |
 
 **Events** (`track`, kind `custom`; server unless marked client).
 | Event | When | Props |
 |---|---|---|
-| `target_hit` | every hit | `kind` (`high`, `low`, `golden`), `via` (`click`, `touch`), `grade`, `points`, `combo`, `multiplier`, `distance` (studs), `reaction_ms` (spawn to hit, lag-compensated), `off_ms` (from the PERFECT moment, - early), `life` (0..1 of its lifetime), `progress` (0..1 of the round), `ping_ms` |
-| `target_missed` | a target vanished unhit; for the nearest player (server-only if nobody has a character) | `kind`, `distance` (-1 = nobody), `life_ms`, `progress`, `players`, `alive` |
+| `target_hit` | every hit | `kind` (`high`, `low`, `golden`), `via` (`click`, `touch`), `free` (true for a touch: running into a low target), `grade`, `points`, `combo`, `multiplier`, `distance` (studs), `reaction_ms` (spawn to hit, lag-compensated), `off_ms` (from the PERFECT moment, - early), `life` (0..1 of its lifetime), `progress` (0..1 of the round), `ping_ms` |
+| `target_missed` | a target vanished unhit, and the nearest player was within 15 studs of it (farther misses only count in `round_summary`) | `kind`, `distance` (studs to that player, 0-15), `life_ms`, `progress`, `players`, `alive` |
 | `combo_milestone` | the multiplier steps up (x2 at 5, x3 at 12, x4 at 25) | `combo`, `multiplier`, `progress` |
 | `combo_lost` | a combo of 5+ ends | `combo`, `why` (`whiff`, `timeout`) |
 | `pad_start` | standing on the pad when it starts the countdown | `held` (s), `players` |
 | `round_joined_late` | joined mid-round | `round`, `secs_left`, `players` |
 | `round_end` | per player, at the end of a round | `round`, `score`, `placement`, `players`, `duration`, `played`, `length` (`normal`, `short`), `late`, `hits`, `perfects`, `greats`, `goods`, `golds`, `best_combo`, `whiffs`, `refused`, `contested` (taken first by someone else), `targets`, `expired`, `coins`, `personal_best`, `new_best`, `swaps`, `session_rounds` |
 | `personal_best` | a round beat the player's best | `score`, `previous`, `gain`, `first`, `session_rounds` |
-| `round_queued`, `round_started`, `round_summary` | server-only, one each per round | `round`, `by` (`pad`, `timer`), `lobby_secs`, `players`, `length`; `secs`; `duration`, `top`, `targets`, `expired`, `left`, `swaps` |
+| `round_queued`, `round_started`, `round_summary` | server-only, one each per round | `round`, `by` (`pad`, `timer`), `lobby_secs`, `players`, `length`; `secs`; `duration`, `top`, `targets`, `expired` (every miss, near and far), `missed_near` (misses within 15 studs, one `target_missed` row each), `left`, `swaps` |
 | `coin_pickup` | a lobby coin | `coin`, `balance`, `taken` (ring coins waiting to respawn), `phase` |
 | `shop_opened` | the shop card asked for its state | `coins`, `owned`, `equipped`, `phase`, `pack` |
 | `item_viewed` (client) | an item tapped | `item`, `price`, `currency` (`coins`, `robux`), `owned`, `equipped`, `affordable` |

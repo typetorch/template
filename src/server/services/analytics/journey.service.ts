@@ -27,7 +27,7 @@ interface Journey {
  * - activities (per player): lobby -> queued (on the start pad) -> countdown -> round -> results -> lobby, and
  *   "waiting" for a player who joined during the results (no result card); the server's own activity is the phase;
  * - onboarding steps spawned, moved, reached_pad, round_joined, second_round (RoundService logs first_hit and
- *   round_finished);
+ *   round_finished, TargetService first_click);
  * - round-funnel steps lobby, countdown, started (RoundService logs first_hit and finished), pad_start and
  *   round_joined_late.
  * RoundService doesn't know about this service; it only listens.

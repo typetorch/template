@@ -37,6 +37,8 @@ interface SavedTarget {
 	spawnedAt: number;
 	lifetime: number;
 	golden: boolean;
+	/** A low target (run into it): the only kind a touch hit counts on. Handovers from older builds have none. */
+	low?: boolean;
 	/** Index into TARGET_COLORS (1-based). */
 	color: number;
 }
@@ -63,12 +65,14 @@ function round2(value: number) {
 
 /** Recently popped target ids remembered (to tell "someone else took it" from "it was gone anyway"). */
 const RECENT_POPS = 32;
+/** A miss is logged (target_missed) only when a player was this close to it; every miss counts in round_summary. */
+const MISS_LOG_STUDS = 15;
 
 /**
  * Spawns targets during a round and validates every hit on the server: the target exists, the timing fits (with lag
  * compensation from the player's ping, capped), the player is close enough (any distance in the arena for a click,
- * touching distance for running into it), and the per-player cooldown; the network layer already rate-limited and
- * type-checked the message.
+ * touching distance for running into a low target, the only kind a touch can pop), and the per-player cooldown; the
+ * network layer already rate-limited and type-checked the message.
  *
  * Target parts belong to this generation (its trove), so a hot-swap removes them. `TypeTorch.onSwapOut` saves the
  * live ones as plain data and the next generation puts them back with the same ids and timers.
@@ -158,6 +162,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 			spawnedAt: at,
 			lifetime: lifetimeFor(progress, golden),
 			golden,
+			low,
 			color: this.random.NextInteger(1, TARGET_COLORS.size()),
 		});
 	}
@@ -183,6 +188,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 		part.SetAttribute("Lifetime", saved.lifetime);
 		part.SetAttribute("Golden", saved.golden);
 		part.SetAttribute("Size", size);
+		if (saved.low) part.SetAttribute("Low", true);
 		CollectionService.AddTag(part, TARGET_TAG);
 		part.Parent = this.folder;
 		this.targets.set(saved.id, { ...saved, part, position, gone: false });
@@ -192,9 +198,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 		target.gone = true;
 		target.part?.Destroy();
 		target.part = undefined;
-		this.round.noteTargetExpired();
-		// Nobody hit it: a miss for the nearest player, the one it was most likely meant for (server-only if nobody has a
-		// character).
+		// Nobody hit it: a miss for the nearest player, the one it was most likely meant for.
 		let nearest: Player | undefined;
 		let distance = math.huge;
 		for (const player of Players.GetPlayers()) {
@@ -206,9 +210,13 @@ export class TargetService extends Module implements OnInit, OnTick {
 				nearest = player;
 			}
 		}
+		// Every miss counts in round_summary; the target_missed row only when that player was close enough to go for it.
+		const near = nearest !== undefined && distance <= MISS_LOG_STUDS;
+		this.round.noteTargetExpired(near);
+		if (!near) return;
 		this.analytics.track(nearest, EVENTS.targetMissed, {
 			kind: this.kindOf(target),
-			distance: nearest ? math.floor(distance) : -1,
+			distance: math.floor(distance),
 			life_ms: math.floor(target.lifetime * 1000),
 			progress: round2(this.round.progress(now())),
 			players: Players.GetPlayers().size(),
@@ -254,6 +262,8 @@ export class TargetService extends Module implements OnInit, OnTick {
 
 		const distance = root.Position.sub(target.position).Magnitude;
 		if (via === "touch") {
+			// Running into a target only pops a low one: a player standing still can't pop the high ones.
+			if (!target.low) return [false, "Not low"];
 			const radius = (diameterFor(target.golden) * scaleAt(age, target.lifetime)) / 2;
 			if (distance > radius + TOUCH_SLACK) return [false, "Too far"];
 		} else if (distance > CLICK_RANGE) {
@@ -270,6 +280,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 		this.analytics.track(player, EVENTS.targetHit, {
 			kind: this.kindOf(target),
 			via,
+			free: via === "touch",
 			grade: result.grade,
 			points: result.points,
 			combo: result.combo,
@@ -282,6 +293,7 @@ export class TargetService extends Module implements OnInit, OnTick {
 			progress: round2(this.round.progress(at)),
 			ping_ms: math.floor(player.GetNetworkPing() * 1000),
 		});
+		if (via === "click") this.analytics.step(player, "onboarding", "first_click");
 		network.server.rush.popped.fireExcept(player, {
 			targetId,
 			userId: player.UserId,
@@ -303,8 +315,8 @@ export class TargetService extends Module implements OnInit, OnTick {
 		const targets = new Array<SavedTarget>();
 		for (const [, target] of this.targets) {
 			if (target.gone) continue;
-			const { id, x, y, z, spawnedAt, lifetime, golden, color } = target;
-			targets.push({ id, x, y, z, spawnedAt, lifetime, golden, color });
+			const { id, x, y, z, spawnedAt, lifetime, golden, low, color } = target;
+			targets.push({ id, x, y, z, spawnedAt, lifetime, golden, low, color });
 		}
 		this.handover.saved = { round: this.round.roundNumber(), nextSpawnAt: this.nextSpawnAt, targets };
 	}
@@ -317,7 +329,8 @@ export class TargetService extends Module implements OnInit, OnTick {
 		let restored = 0;
 		for (const target of saved.targets) {
 			if (at >= target.spawnedAt + target.lifetime) continue;
-			this.place(target);
+			// A handover from a build before the Low flag: the height tells, as kindOf does.
+			this.place({ ...target, low: target.low ?? (this.kindOf(target) === "low") });
 			restored += 1;
 		}
 		this.nextSpawnAt = saved.nextSpawnAt;

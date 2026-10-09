@@ -13,8 +13,11 @@ import type { Phase } from "../rush/types";
 // Funnels: step(player, funnel, index, label), index = position in the list + 1 --------------------------------------
 
 export const FUNNELS = {
-	/** The first minutes of a session. Logged once per session; read it with the `players: "new"` filter. */
-	onboarding: ["spawned", "moved", "reached_pad", "round_joined", "first_hit", "round_finished", "second_round"],
+	/**
+	 * The first minutes of a session. Logged once per session; read it with the `players: "new"` filter. `first_click` (8)
+	 * is a click hit: running into a target (touch) doesn't count.
+	 */
+	onboarding: ["spawned", "moved", "reached_pad", "round_joined", "first_hit", "round_finished", "second_round", "first_click"],
 	/**
 	 * Every round, per player who waited for it in the lobby (or the countdown). A player who joins mid-round skips
 	 * the round funnel for that round (`round_joined_late` instead).

@@ -32,6 +32,8 @@ interface LocalTarget {
 	readonly spawnedAt: number;
 	readonly lifetime: number;
 	readonly golden: boolean;
+	/** A low target: the only kind running into it pops. */
+	readonly low: boolean;
 	readonly color: Color3;
 	readonly ring: BillboardGui;
 	readonly ringStroke: UIStroke;
@@ -127,8 +129,8 @@ export class TargetController extends Module implements OnStart, OnRender {
 			const life = age / target.lifetime;
 			target.part.LocalTransparencyModifier = life > 0.85 ? math.min((life - 0.85) / 0.15, 1) * 0.6 : 0;
 
-			// Run into it (low targets): the server checks the same distance with some slack.
-			if (playing && root && clock >= target.retryAt && age >= MIN_REACTION + 0.05) {
+			// Run into it (low targets only): the server checks the same distance with some slack.
+			if (target.low && playing && root && clock >= target.retryAt && age >= MIN_REACTION + 0.05) {
 				if (root.Position.sub(target.part.Position).Magnitude <= diameter / 2 + TOUCH_REACH) this.tryHit(target, "touch");
 			}
 		}
@@ -142,6 +144,7 @@ export class TargetController extends Module implements OnStart, OnRender {
 		const lifetime = part.GetAttribute("Lifetime");
 		const size = part.GetAttribute("Size");
 		const golden = part.GetAttribute("Golden") === true;
+		const low = part.GetAttribute("Low") === true;
 		if (!typeIs(id, "number") || !typeIs(spawnedAt, "number") || !typeIs(lifetime, "number") || !typeIs(size, "number")) return;
 
 		const ring = elementTrove.add(
@@ -179,6 +182,7 @@ export class TargetController extends Module implements OnStart, OnRender {
 			spawnedAt,
 			lifetime,
 			golden,
+			low,
 			color: part.Color,
 			ring,
 			ringStroke,
