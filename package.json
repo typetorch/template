@@ -20,15 +20,15 @@
 		"@rbxts/services": "^1.6.0",
 		"@rbxts/t": "^3.2.1",
 		"@rbxts/trove": "^1.3.0",
-		"@typetorch/framework": "^0.4.0",
-		"@typetorch/kernel": "^0.4.0",
+		"@typetorch/framework": "^0.5.0",
+		"@typetorch/kernel": "^0.5.1",
 		"rbxts-transform-debug": "2.2.0"
 	},
 	"devDependencies": {
 		"@rbxts/compiler-types": "^3.0.0-types.0",
 		"@rbxts/types": "^1.0.956",
-		"@typetorch/cli": "^0.9.0",
-		"@typetorch/dev-server": "^0.2.2",
+		"@typetorch/cli": "^0.9.1",
+		"@typetorch/dev-server": "^0.2.3",
 		"@typetorch/transformer": "^0.2.1",
 		"roblox-ts": "^3.0.0",
 		"typescript": "5.5.3"
