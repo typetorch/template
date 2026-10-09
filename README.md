@@ -74,7 +74,7 @@ on, and the board counts "Updated live xN". Arena knobs (`ARENA_RADIUS`, `PAD_*`
 
 ## Analytics
 The game creates the framework's `AnalyticsEngine` on the server (`AnalyticsService`) and the client
-(`AnalyticsController`), and feeds every query of `@typetorch/analytics` (overview, roblox, retention, funnel, timeline,
+(`AnalyticsController`), and feeds every query of `@typetorch/backend` (overview, roblox, retention, funnel, timeline,
 player-graph, flow, experiment, confusion, top-events). The engine logs joins, leaves, devices, tech health, zones,
 screens and new players' first sessions by itself; the game adds what only it knows. Every name lives in
 `src/shared/analytics/catalog.ts`: funnel steps keep their index forever (new steps go at the end), an experiment's
