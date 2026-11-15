@@ -154,17 +154,36 @@ TYPETORCH_ADMIN_TOKEN=<the backend's admin token>
 ## Build
 ```sh
 bun install               # @typetorch/* from npm (framework, kernel, transformer, cli, dev-server)
+rokit install             # Rojo and Lune (rokit.toml)
 bun run build             # writes src/shared/build.ts, then rbxtsc
 bun run payload           # build + rojo build -> build/payload.rbxm
 bun run typetorch build   # the CLI (@typetorch/cli): the payload exactly as a deploy uploads it
 ```
+- **The pins are behind npm.** `bun.lock` installs framework 0.5.0, kernel 0.5.1, CLI 0.9.1, transformer 0.2.1 and
+  dev-server 0.2.3. A new game should take the newest, then build again:
+  ```sh
+  bun add @typetorch/framework@latest @typetorch/kernel@latest
+  bun add -d @typetorch/cli@latest @typetorch/transformer@latest @typetorch/dev-server@latest
+  ```
+  `bun run typetorch update` later updates the CLI alone.
+- **darklua** (`rokit add seaofvoices/darklua`) packs the payload of every `typetorch build`, `upload` and `deploy`
+  (CLI 0.17+). `rokit.toml` doesn't list it yet, so without it each of them warns
+  `darklua not found: this payload isn't minified`.
+- **goblox** (optional, `bun add -d goblox`): `typetorch build` (CLI 0.16+) compiles with it instead of rbxtsc. Change
+  the `build` script's `rbxtsc` to `goblox` too, or each build warns and runs goblox directly. goblox doesn't run the
+  `rbxts-transform-debug` plugin, so move the macros to `@typetorch/transformer/macros` first (below).
 - `bun scripts/build-info.ts --channel prod --dirty` writes `src/shared/build.ts` by hand (the CLI writes the same
   file). With `TYPETORCH_SKIP_BUILD_INFO=1`, `bun run build` keeps a `build.ts` the CLI already wrote.
-- Use `$print` / `$warn` / `$assert` from `rbxts-transform-debug`, never `print` / `warn` / `assert`.
-- `tsconfig.json` runs two compiler plugins, in this order: `rbxts-transform-debug` (the `$print` macros), then
-  `@typetorch/transformer` (the type guards `createNetwork` checks every message with, the constructor dependency ids
-  of `@Service` / `@Controller`, and your own `Modding` macros). No Flamework: `Modding`, `Reflect` and `t` come from
-  `@typetorch/framework`, and only that package is mapped into the payload.
+- Use the debug macros `$print` / `$warn` / `$assert`, never `print` / `warn` / `assert`: they carry
+  `[src/file.ts:line]` in dev builds; prod builds drop `$print` / `$warn` and keep `$assert` without the position.
+  This template still imports them from `rbxts-transform-debug` and runs two compiler plugins, in this order:
+  `rbxts-transform-debug`, then `@typetorch/transformer` (the type guards `createNetwork` checks every message with,
+  the constructor dependency ids of `@Service` / `@Controller`, and your own `Modding` macros). No Flamework:
+  `Modding`, `Reflect` and `t` come from `@typetorch/framework`, and only that package is mapped into the payload.
+- **`@typetorch/transformer` 0.3+** has the same macros in `@typetorch/transformer/macros`, so one plugin is enough. To
+  move: remove the `rbxts-transform-debug` plugin from `tsconfig.json`, change the imports in `src/` and the import line
+  in `scripts/build-info.ts` to `@typetorch/transformer/macros`, then `bun remove rbxts-transform-debug`. The CLI
+  (0.12.2+) picks the import for the `build.ts` it writes by itself.
 - With a framework checkout next to the game, `bun run payload` then
   `lune run ../framework/scripts/test-generations.luau build/payload.rbxm` boots two
   generations of the payload under Lune and checks that each gets a fresh registry, that every service and controller
@@ -173,23 +192,31 @@ bun run typetorch build   # the CLI (@typetorch/cli): the payload exactly as a d
 ## Testing in Studio
 Run your local code in Studio with the real kernel, the dev menu and DataStores, without uploading anything.
 ```sh
-bun run watch             # build info, then rbxtsc -w (recompiles out/ on every save)
-bun run studio            # in a second terminal: rojo serve studio.project.json
+bun run typetorch serve   # watch (bun run watch) + rojo serve studio.project.json + a control API, one process
 ```
-Open a place of this experience in Studio (DataStores need "Enable Studio Access to API Services"), connect the Rojo
-plugin, then press Play.
+It needs CLI 0.11+ (the pinned 0.9.1 doesn't have it: update first, see Build) and the TypeTorch Studio plugin
+(`TypeTorchSync.rbxm` from https://github.com/typetorch/studio-plugin/releases into Studio's plugins folder). Open a
+place of this experience in Studio (DataStores need "Enable Studio Access to API Services"); the plugin attaches to
+`serve` by itself. Press Play. Guide: https://github.com/typetorch/docs/blob/main/guides/studio-testing.md.
+
+Without the plugin, the two-terminal loop still works with the stock Rojo plugin: `bun run watch` (build info, then
+`rbxtsc -w`) and, in a second terminal, `bun run studio` (`rojo serve studio.project.json`); connect, then Play.
 - `studio.project.json` syncs the kernel from `node_modules/@typetorch/kernel` (the same tree as the kernel's place)
   and the compiled payload (`out/`, `include/` and the packages, the same tree as `default.project.json`) into
   `ServerStorage.TypeTorchDev.Payload`, plus the kernel place's baseplate and spawn.
+- It lists the kernel's files one by one and doesn't map `RemoteDebug`, `Bundle` (kernel 0.5.3+) or `LiveDebug`
+  (kernel 0.5.7) yet. A playtest still boots, and warns `TypeTorchKernel.<name> is missing` for each. Add them under
+  `TypeTorchKernel` the way `node_modules/@typetorch/kernel/place.project.json` maps them.
 - In Studio, kernel 0.3.1+ mounts a clone of that Model instead of an uploaded artifact: id `local-<HHMMSS UTC>`,
   branch `dev` (or the `Branch` attribute of `ServerStorage.TypeTorchDev`), dev channel. Server > Status shows
   "Studio: local payload".
 - The payload holds only ModuleScripts, so nothing in it runs by itself: only the kernel's clone runs, once.
-- **Code changes need Stop + Play.** Rojo doesn't sync into a running play session. The dev menu's Reload remounts a
-  fresh clone of the same code: use it to test swaps (`persist`, `onSwapOut`, update toasts), not new code.
+- **Saves reload a running playtest** with `typetorch serve`, the TypeTorch plugin and kernel 0.5.4+ (the pinned 0.5.1
+  is older: update it). Otherwise code changes need Stop + Play. The dev menu's Reload remounts a fresh clone of the
+  same code: use it to test swaps (`persist`, `onSwapOut`, update toasts).
 - Deploys and the 60 s poll don't move a local session. A pin or branch switch in the dev menu still loads an uploaded
   artifact, and Reload goes back to the local copy. To boot the branch head again, delete
-  `ServerStorage.TypeTorchDev.Payload` (with Rojo disconnected).
+  `ServerStorage.TypeTorchDev.Payload` (with the sync disconnected).
 - Don't save or publish the place from that session: live servers ignore the folder, but it bloats the place
   (`typetorch doctor` warns). `typetorch kernel deploy` publishes the place.
 - Kernel 0.3.0 ignores the folder and boots the branch head: it needs `@typetorch/kernel` 0.3.1 or newer.
